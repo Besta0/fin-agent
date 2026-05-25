@@ -56,9 +56,33 @@ def _format_news(news: list[dict]) -> str:
     for item in news[:5]:
         title = item.get("title", "Untitled")
         publisher = item.get("publisher", "Unknown")
+        published = item.get("published") or "日期未知"
         link = item.get("link", "")
-        lines.append(f"- {title} ({publisher}) {link}".strip())
+        title_text = f"[{title}]({link})" if link else title
+        lines.append(f"- {title_text} ({publisher}, {published})")
     return "\n".join(lines)
+
+
+def _source_links_section(news: list[dict]) -> str:
+    if not news:
+        return ""
+
+    lines = ["## 资料线索"]
+    for idx, item in enumerate(news[:6], start=1):
+        title = item.get("title") or "Untitled"
+        publisher = item.get("publisher") or "Unknown"
+        published = item.get("published") or "日期未知"
+        link = item.get("link") or ""
+        title_text = f"[{title}]({link})" if link else title
+        lines.append(f"{idx}. {title_text}\n   来源：{publisher}；日期：{published}")
+    return "\n".join(lines)
+
+
+def _append_source_links(report: str, news: list[dict]) -> str:
+    section = _source_links_section(news)
+    if not section or "## 资料线索" in report:
+        return report
+    return f"{report.rstrip()}\n\n{section}"
 
 
 def _fallback_report(state: ResearchState) -> str:
@@ -143,6 +167,7 @@ def _build_llm_prompt(state: ResearchState, fallback_rating: str, confidence: in
 3. 必须包含置信度、核心理由、风险因素和后续观察指标。
 4. 语气专业克制，不要给出直接买卖指令。
 5. 明确写出“仅用于研究，不构成投资建议”。
+6. 新闻与催化部分如果有 link 字段，必须保留为 Markdown 链接。
 
 结构化数据：
 ```json
@@ -156,6 +181,7 @@ async def report_node(state: ResearchState) -> ResearchState:
     rating, confidence = _rating_from_state(state)
     prompt = _build_llm_prompt(state, rating, confidence)
     final_report = await generate_text(prompt, fallback=fallback)
+    final_report = _append_source_links(final_report, state.get("news", []))
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     ticker = state.get("ticker") or "unknown"

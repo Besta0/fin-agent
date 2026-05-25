@@ -21,6 +21,14 @@ def _get_nested_url(value: Any) -> str:
     return ""
 
 
+def _first_url(*values: Any) -> str:
+    for value in values:
+        url = _get_nested_url(value)
+        if url:
+            return url
+    return ""
+
+
 def get_recent_news(ticker: str, limit: int = 6) -> list[dict[str, Any]]:
     if not ticker:
         return []
@@ -44,8 +52,16 @@ def get_recent_news(ticker: str, limit: int = 6) -> list[dict[str, Any]]:
             if isinstance(content.get("provider"), dict)
             else content.get("publisher") or raw.get("publisher", "")
         )
-        link = _get_nested_url(content.get("canonicalUrl")) or raw.get("link", "")
-        published = content.get("pubDate") or _timestamp_to_date(raw.get("providerPublishTime"))
+        link = _first_url(
+            content.get("canonicalUrl"),
+            content.get("clickThroughUrl"),
+            raw.get("link", "") if isinstance(raw, dict) else "",
+        )
+        published = (
+            content.get("pubDate")
+            or content.get("displayTime")
+            or _timestamp_to_date(raw.get("providerPublishTime"))
+        )
 
         if title:
             items.append(

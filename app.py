@@ -15,6 +15,27 @@ AGENT_TITLES = {
 }
 
 
+def _format_news_clues(news: list[dict], limit: int = 6) -> str:
+    if not news:
+        return "暂无可用新闻线索。"
+
+    lines = []
+    for idx, item in enumerate(news[:limit], start=1):
+        title = item.get("title") or "Untitled"
+        publisher = item.get("publisher") or "Unknown"
+        published = item.get("published") or "日期未知"
+        link = item.get("link") or ""
+        title_text = f"[{title}]({link})" if link else title
+        lines.append(f"{idx}. {title_text}\n   来源：{publisher}；日期：{published}")
+    return "\n".join(lines)
+
+
+def _format_risk_clues(risks: list[str], limit: int = 5) -> str:
+    if not risks:
+        return "暂无明确风险线索。"
+    return "\n".join(f"{idx}. {risk}" for idx, risk in enumerate(risks[:limit], start=1))
+
+
 def _brief_update(node_name: str, update: dict) -> str:
     if node_name == "coordinator":
         ticker = update.get("ticker") or "未识别"
@@ -40,7 +61,13 @@ def _brief_update(node_name: str, update: dict) -> str:
     if node_name == "news_risk":
         risks = update.get("risks", [])
         news = update.get("news", [])
-        return f"已整理 **{len(news)}** 条新闻线索和 **{len(risks)}** 条主要风险。"
+        return (
+            f"已整理 **{len(news)}** 条新闻线索和 **{len(risks)}** 条主要风险。\n\n"
+            "### 新闻线索\n"
+            f"{_format_news_clues(news)}\n\n"
+            "### 风险线索\n"
+            f"{_format_risk_clues(risks)}"
+        )
 
     if node_name == "report":
         return "中文投研报告已生成。"
