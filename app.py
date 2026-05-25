@@ -40,7 +40,11 @@ def _brief_update(node_name: str, update: dict) -> str:
     if node_name == "coordinator":
         ticker = update.get("ticker") or "未识别"
         horizon = update.get("horizon") or "默认周期"
-        return f"已识别标的：**{ticker}**；分析周期：**{horizon}**。"
+        resolution = update.get("ticker_resolution", {})
+        method = resolution.get("method", "rules")
+        confidence = resolution.get("confidence")
+        confidence_text = f"；置信度：**{confidence:.0%}**" if isinstance(confidence, (int, float)) else ""
+        return f"已识别标的：**{ticker}**；分析周期：**{horizon}**；识别方式：**{method}**{confidence_text}。"
 
     if node_name == "market":
         market_data = update.get("market_data", {})

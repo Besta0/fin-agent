@@ -9,6 +9,7 @@ class ResearchState(TypedDict, total=False):
     company_name: str
     market: str
     horizon: str
+    ticker_resolution: dict[str, Any]
     analysis_modules: list[str]
     market_data: dict[str, Any]
     technicals: dict[str, Any]
