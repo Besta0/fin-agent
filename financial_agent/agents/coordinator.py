@@ -23,6 +23,12 @@ COMPANY_ALIASES = {
     "脸书": ("META", "Meta Platforms"),
     "amd": ("AMD", "Advanced Micro Devices"),
     "台积电": ("TSM", "Taiwan Semiconductor"),
+    "闪迪": ("SNDK", "Sandisk"),
+    "sandisk": ("SNDK", "Sandisk"),
+    "san disk": ("SNDK", "Sandisk"),
+    "西部数据": ("WDC", "Western Digital"),
+    "western digital": ("WDC", "Western Digital"),
+    "wdc": ("WDC", "Western Digital"),
 }
 
 
