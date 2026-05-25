@@ -3,11 +3,19 @@ from __future__ import annotations
 from financial_agent.settings import settings
 
 
-PROVIDER_BASE_URLS = {
-    "openai": None,
-    "deepseek": "https://api.deepseek.com",
-    "minimax": "https://api.minimax.io/v1",
-}
+def _provider_kwargs() -> dict:
+    if settings.llm_provider == "deepseek":
+        kwargs: dict = {}
+        if settings.deepseek_thinking in {"enabled", "disabled"}:
+            kwargs["extra_body"] = {"thinking": {"type": settings.deepseek_thinking}}
+        if settings.deepseek_thinking == "enabled":
+            kwargs["reasoning_effort"] = settings.deepseek_reasoning_effort
+        return kwargs
+
+    if settings.llm_provider == "minimax" and settings.minimax_reasoning_split:
+        return {"extra_body": {"reasoning_split": True}}
+
+    return {}
 
 
 def get_chat_model(temperature: float | None = None):
@@ -17,10 +25,10 @@ def get_chat_model(temperature: float | None = None):
 
     from langchain_openai import ChatOpenAI
 
-    base_url = settings.llm_base_url or PROVIDER_BASE_URLS.get(settings.llm_provider)
     kwargs = {}
-    if base_url:
-        kwargs["base_url"] = base_url
+    if settings.llm_base_url:
+        kwargs["base_url"] = settings.llm_base_url
+    kwargs.update(_provider_kwargs())
 
     return ChatOpenAI(
         model=settings.llm_model,

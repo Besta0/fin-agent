@@ -56,11 +56,13 @@ cp .env.example .env
 
 如果要使用 LLM 报告生成，在 `.env` 中设置一个 OpenAI-compatible provider。
 
+同一时间只启用一个 provider。想保留另一个 provider 的配置时，把它前面加 `#` 注释掉。
+
 OpenAI:
 
 ```bash
 LLM_PROVIDER=openai
-LLM_API_KEY=your_openai_api_key
+OPENAI_API_KEY=your_openai_api_key
 LLM_MODEL=gpt-4o-mini
 LLM_BASE_URL=
 ```
@@ -69,18 +71,21 @@ DeepSeek:
 
 ```bash
 LLM_PROVIDER=deepseek
-LLM_API_KEY=your_deepseek_api_key
+DEEPSEEK_API_KEY=your_deepseek_api_key
 LLM_MODEL=deepseek-v4-flash
 LLM_BASE_URL=https://api.deepseek.com
+DEEPSEEK_THINKING=disabled
+DEEPSEEK_REASONING_EFFORT=high
 ```
 
 MiniMax:
 
 ```bash
 LLM_PROVIDER=minimax
-LLM_API_KEY=your_minimax_api_key
+MINIMAX_API_KEY=your_minimax_api_key
 LLM_MODEL=MiniMax-M2.7
 LLM_BASE_URL=https://api.minimax.io/v1
+MINIMAX_REASONING_SPLIT=false
 ```
 
 启动 Chainlit：
