@@ -11,6 +11,9 @@ AGENT_TITLES = {
     "market": "Market Agent",
     "technical": "Technical Agent",
     "news_risk": "News & Risk Agent",
+    "bull": "Bull Agent",
+    "bear": "Bear Agent",
+    "committee": "Committee Agent",
     "report": "Report Agent",
 }
 
@@ -34,6 +37,19 @@ def _format_risk_clues(risks: list[str], limit: int = 5) -> str:
     if not risks:
         return "暂无明确风险线索。"
     return "\n".join(f"{idx}. {risk}" for idx, risk in enumerate(risks[:limit], start=1))
+
+
+def _format_case(case: dict, argument_key: str = "arguments") -> str:
+    if not case:
+        return "暂无观点。"
+    confidence = case.get("confidence", "N/A")
+    summary = case.get("summary", "暂无摘要")
+    arguments = case.get(argument_key, [])
+    lines = [f"置信度：**{confidence}%**", f"摘要：{summary}"]
+    if arguments:
+        lines.append("核心论据：")
+        lines.extend(f"{idx}. {arg}" for idx, arg in enumerate(arguments[:4], start=1))
+    return "\n".join(lines)
 
 
 def _brief_update(node_name: str, update: dict) -> str:
@@ -71,6 +87,25 @@ def _brief_update(node_name: str, update: dict) -> str:
             f"{_format_news_clues(news)}\n\n"
             "### 风险线索\n"
             f"{_format_risk_clues(risks)}"
+        )
+
+    if node_name == "bull":
+        return "### 看多观点\n" + _format_case(update.get("bull_case", {}))
+
+    if node_name == "bear":
+        return "### 看空观点\n" + _format_case(update.get("bear_case", {}))
+
+    if node_name == "committee":
+        view = update.get("committee_view", {})
+        reasons = view.get("key_reasons", [])
+        reason_text = "\n".join(f"{idx}. {reason}" for idx, reason in enumerate(reasons, start=1))
+        return (
+            f"投委会结论：**{view.get('rating', 'N/A')}**；"
+            f"置信度：**{view.get('confidence', 'N/A')}%**。\n\n"
+            f"多空强度：Bull **{view.get('bull_confidence', 'N/A')}%** / "
+            f"Bear **{view.get('bear_confidence', 'N/A')}%**\n\n"
+            f"关键依据：\n{reason_text or '暂无'}\n\n"
+            f"不确定性：{view.get('uncertainty', '暂无')}"
         )
 
     if node_name == "report":

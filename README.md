@@ -14,6 +14,9 @@
 - **Market Agent**：获取价格、涨跌幅、成交量和区间表现
 - **Technical Agent**：计算 MA、RSI、MACD 等技术指标
 - **News & Risk Agent**：整理近期新闻和主要风险
+- **Bull Agent**：形成看多论据
+- **Bear Agent**：形成看空论据
+- **Committee Agent**：比较多空强度并给出最终评级
 - **Report Agent**：生成结构化中文投研报告
 
 它吸引人的地方不是“让 AI 猜涨跌”，而是把投研流程变成可追踪、可扩展、可展示的系统。
@@ -115,6 +118,12 @@ Technical Agent
   ↓
 News & Risk Agent
   ↓
+Bull Agent
+  ↓
+Bear Agent
+  ↓
+Committee Agent
+  ↓
 Report Agent
   ↓
 中文投研报告
@@ -122,8 +131,8 @@ Report Agent
 
 ## 后续升级方向
 
-- 加入 Bull Agent / Bear Agent 多空辩论
 - 接入 SEC filings、财报电话会 transcript 和研报 RAG
+- 加入 Fundamental Agent，补充估值和财报分析
 - 用 MCP 统一封装行情、新闻、财报和报告导出工具
 - 增加 watchlist、历史报告、定时日报
 - 从 Chainlit 升级到 Next.js / FastAPI 产品化前端

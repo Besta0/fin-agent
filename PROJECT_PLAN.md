@@ -15,7 +15,7 @@
 核心吸引力：
 
 - **多 Agent 分工直观**：不是一个黑盒聊天机器人，而是一个投研团队。
-- **流程可解释**：用户能看到 Coordinator、Market、Technical、Risk、Report 各自做了什么。
+- **流程可解释**：用户能看到 Coordinator、Market、Technical、Risk、Bull、Bear、Committee、Report 各自做了什么。
 - **数据和推理结合**：行情数据、技术指标和 LLM 总结形成闭环。
 - **适合展示工程能力**：覆盖 LangGraph、工具调用、结构化状态、Chainlit UI 和后续 RAG/MCP 扩展。
 - **可产品化**：未来可以扩展成 watchlist、日报、PDF 报告、财报 RAG 和 Next.js 工作台。
@@ -100,6 +100,44 @@
 - 如果新闻不可用，报告中明确说明暂无数据
 - 根据 RSI、近 1 月涨跌幅和通用金融风险生成风险清单
 
+### Bull Agent
+
+职责：
+
+- 从行情、趋势、技术指标和新闻中提取看多论据
+- 说明看多观点的薄弱点
+- 输出看多置信度
+
+当前实现：
+
+- 基于近 5 日 / 1 月涨跌幅、均线趋势、RSI、MACD 和新闻热度生成规则型看多观点
+- 即使 LLM 不可用，也能稳定输出结构化观点
+
+### Bear Agent
+
+职责：
+
+- 从回撤、过热、动能转弱和风险清单中提取看空论据
+- 说明看空观点可能被反驳的地方
+- 输出看空置信度
+
+当前实现：
+
+- 基于近 1 日 / 5 日回撤、近 1 月涨幅、RSI、MACD 和风险清单生成规则型看空观点
+
+### Committee Agent
+
+职责：
+
+- 比较 Bull Agent 和 Bear Agent 的论据强度
+- 给出最终评级和置信度
+- 总结最大不确定性
+
+当前实现：
+
+- 根据多空置信度差值输出 偏多 / 中性偏多 / 中性 / 中性偏空 / 偏空
+- Report Agent 会优先使用投委会结论作为最终评级
+
 ### Report Agent
 
 职责：
@@ -129,6 +167,12 @@ Technical Agent
   ↓
 News & Risk Agent
   ↓
+Bull Agent
+  ↓
+Bear Agent
+  ↓
+Committee Agent
+  ↓
 Report Agent
   ↓
 中文报告 + Plotly 图表
@@ -138,11 +182,8 @@ Report Agent
 
 二期目标是把 MVP 从“短线分析助手”升级成“更像投研团队”的系统。
 
-新增 Agent：
+下一批新增 Agent：
 
-- **Bull Agent**：专门提出看多理由
-- **Bear Agent**：专门提出看空理由
-- **Investment Committee Agent**：比较多空观点，给出最终评级
 - **Fundamental Agent**：分析营收、利润、估值和财报指引
 
 新增能力：

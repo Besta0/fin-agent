@@ -12,6 +12,12 @@ REPORT_DIR = Path("outputs/reports")
 
 
 def _rating_from_state(state: ResearchState) -> tuple[str, int]:
+    committee_view = state.get("committee_view", {})
+    committee_rating = committee_view.get("rating")
+    committee_confidence = committee_view.get("confidence")
+    if isinstance(committee_rating, str) and isinstance(committee_confidence, (int, float)):
+        return committee_rating, int(committee_confidence)
+
     market_data = state.get("market_data", {})
     technicals = state.get("technicals", {})
     returns = market_data.get("returns", {})
@@ -63,6 +69,42 @@ def _format_news(news: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _format_research_case(title: str, case: dict, secondary_key: str) -> str:
+    if not case:
+        return f"### {title}\n\n暂无观点。"
+
+    arguments = case.get("arguments", [])
+    secondary = case.get(secondary_key, [])
+    lines = [
+        f"### {title}",
+        "",
+        f"- 置信度：**{case.get('confidence', 'N/A')}%**",
+        f"- 摘要：{case.get('summary', '暂无摘要')}",
+    ]
+    if arguments:
+        lines.append("- 核心论据：")
+        lines.extend(f"  {idx}. {arg}" for idx, arg in enumerate(arguments[:4], start=1))
+    if secondary:
+        label = "薄弱点" if secondary_key == "weak_points" else "反驳点"
+        lines.append(f"- {label}：")
+        lines.extend(f"  {idx}. {item}" for idx, item in enumerate(secondary[:3], start=1))
+    return "\n".join(lines)
+
+
+def _format_committee_view(committee_view: dict) -> str:
+    if not committee_view:
+        return "暂无投委会观点。"
+
+    reasons = committee_view.get("key_reasons", [])
+    reason_text = "\n".join(f"{idx}. {reason}" for idx, reason in enumerate(reasons[:4], start=1))
+    return f"""- 投委会结论：**{committee_view.get("rating", "N/A")}**
+- 置信度：**{committee_view.get("confidence", "N/A")}%**
+- 多空强度：Bull **{committee_view.get("bull_confidence", "N/A")}%** / Bear **{committee_view.get("bear_confidence", "N/A")}%**
+- 关键依据：
+{reason_text or "暂无"}
+- 最大不确定性：{committee_view.get("uncertainty", "暂无")}"""
+
+
 def _source_links_section(news: list[dict]) -> str:
     if not news:
         return ""
@@ -93,6 +135,9 @@ def _fallback_report(state: ResearchState) -> str:
     technicals = state.get("technicals", {})
     risks = state.get("risks", [])
     news = state.get("news", [])
+    bull_case = state.get("bull_case", {})
+    bear_case = state.get("bear_case", {})
+    committee_view = state.get("committee_view", {})
     rating, confidence = _rating_from_state(state)
 
     returns = market_data.get("returns", {})
@@ -111,6 +156,10 @@ def _fallback_report(state: ResearchState) -> str:
 - 置信度：**{confidence}%**
 - 分析周期：**{horizon}**
 
+### 投委会综合判断
+
+{_format_committee_view(committee_view)}
+
 ## 2. 行情摘要
 
 - 最新收盘价：**{price}**
@@ -128,15 +177,21 @@ def _fallback_report(state: ResearchState) -> str:
 - RSI(14)：**{technicals.get("rsi_14", "N/A")}**
 - MACD：**{technicals.get("macd_signal_label", "N/A")}**
 
-## 4. 新闻与催化
+## 4. 多空观点对比
+
+{_format_research_case("Bull Agent 看多观点", bull_case, "weak_points")}
+
+{_format_research_case("Bear Agent 看空观点", bear_case, "rebuttals")}
+
+## 5. 新闻与催化
 
 {_format_news(news)}
 
-## 5. 主要风险
+## 6. 主要风险
 
 {risk_text}
 
-## 6. 后续观察指标
+## 7. 后续观察指标
 
 1. 下一次财报中的收入增速、利润率和管理层指引。
 2. 股价能否站稳关键均线，以及成交量是否配合。
@@ -155,6 +210,9 @@ def _build_llm_prompt(state: ResearchState, fallback_rating: str, confidence: in
         "technicals": state.get("technicals"),
         "news": state.get("news"),
         "risks": state.get("risks"),
+        "bull_case": state.get("bull_case"),
+        "bear_case": state.get("bear_case"),
+        "committee_view": state.get("committee_view"),
         "fallback_rating": fallback_rating,
         "confidence": confidence,
     }
@@ -168,6 +226,8 @@ def _build_llm_prompt(state: ResearchState, fallback_rating: str, confidence: in
 4. 语气专业克制，不要给出直接买卖指令。
 5. 明确写出“仅用于研究，不构成投资建议”。
 6. 新闻与催化部分如果有 link 字段，必须保留为 Markdown 链接。
+7. 必须包含“多空观点对比”部分，分别总结 Bull Agent 和 Bear Agent 的论据。
+8. 必须包含“投委会综合判断”部分，使用 committee_view 的 rating 和 confidence 作为最终结论。
 
 结构化数据：
 ```json

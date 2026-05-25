@@ -15,6 +15,9 @@ class ResearchState(TypedDict, total=False):
     technicals: dict[str, Any]
     news: list[dict[str, Any]]
     risks: list[str]
+    bull_case: dict[str, Any]
+    bear_case: dict[str, Any]
+    committee_view: dict[str, Any]
     agent_notes: list[dict[str, str]]
     final_report: str
     errors: list[str]
