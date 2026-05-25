@@ -3,5 +3,7 @@ __pycache__/
 *.pyc
 .env
 .chainlit/
+.files/
+chainlit.md
 outputs/reports/*.md
 outputs/reports/*.pdf

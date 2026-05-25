@@ -54,11 +54,33 @@ python -m pip install -r requirements.txt
 cp .env.example .env
 ```
 
-如果要使用 LLM 报告生成，在 `.env` 中设置：
+如果要使用 LLM 报告生成，在 `.env` 中设置一个 OpenAI-compatible provider。
+
+OpenAI:
 
 ```bash
-OPENAI_API_KEY=your_api_key
-OPENAI_MODEL=gpt-4o-mini
+LLM_PROVIDER=openai
+LLM_API_KEY=your_openai_api_key
+LLM_MODEL=gpt-4o-mini
+LLM_BASE_URL=
+```
+
+DeepSeek:
+
+```bash
+LLM_PROVIDER=deepseek
+LLM_API_KEY=your_deepseek_api_key
+LLM_MODEL=deepseek-v4-flash
+LLM_BASE_URL=https://api.deepseek.com
+```
+
+MiniMax:
+
+```bash
+LLM_PROVIDER=minimax
+LLM_API_KEY=your_minimax_api_key
+LLM_MODEL=MiniMax-M2.7
+LLM_BASE_URL=https://api.minimax.io/v1
 ```
 
 启动 Chainlit：

@@ -3,16 +3,30 @@ from __future__ import annotations
 from financial_agent.settings import settings
 
 
+PROVIDER_BASE_URLS = {
+    "openai": None,
+    "deepseek": "https://api.deepseek.com",
+    "minimax": "https://api.minimax.io/v1",
+}
+
+
 def get_chat_model(temperature: float | None = None):
     """Return a chat model when credentials are configured, otherwise None."""
-    if not settings.openai_api_key:
+    if not settings.llm_api_key:
         return None
 
     from langchain_openai import ChatOpenAI
 
+    base_url = settings.llm_base_url or PROVIDER_BASE_URLS.get(settings.llm_provider)
+    kwargs = {}
+    if base_url:
+        kwargs["base_url"] = base_url
+
     return ChatOpenAI(
-        model=settings.openai_model,
+        model=settings.llm_model,
+        api_key=settings.llm_api_key,
         temperature=settings.llm_temperature if temperature is None else temperature,
+        **kwargs,
     )
 
 
