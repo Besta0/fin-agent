@@ -1,0 +1,218 @@
+# Multi-Agent 投研系统项目计划
+
+## 1. 项目定位
+
+本项目是一个面向中文用户的多 Agent 投研助手，使用 LangGraph 编排多个专业 Agent，并通过 Chainlit 展示 Agent 的执行过程。
+
+一句话介绍：
+
+> 输入一句股票分析问题，系统自动拆解任务，调用行情和技术指标工具，由多个 Agent 分工分析，最终生成结构化中文投研报告。
+
+## 2. 项目为什么吸引人
+
+普通股票研究流程非常碎片化：用户需要查行情、看新闻、算指标、找风险、整理报告。这个项目把这些步骤组织成一个“AI 投研团队”，让用户看到每个 Agent 的分工和中间结论。
+
+核心吸引力：
+
+- **多 Agent 分工直观**：不是一个黑盒聊天机器人，而是一个投研团队。
+- **流程可解释**：用户能看到 Coordinator、Market、Technical、Risk、Report 各自做了什么。
+- **数据和推理结合**：行情数据、技术指标和 LLM 总结形成闭环。
+- **适合展示工程能力**：覆盖 LangGraph、工具调用、结构化状态、Chainlit UI 和后续 RAG/MCP 扩展。
+- **可产品化**：未来可以扩展成 watchlist、日报、PDF 报告、财报 RAG 和 Next.js 工作台。
+
+## 3. MVP 目标
+
+第一版只解决一个清晰问题：
+
+> 用户输入美股 ticker 或自然语言问题，系统在一个 Chainlit 会话中生成中文短线投研报告。
+
+示例输入：
+
+```text
+帮我分析一下 NVDA 未来一个月走势
+```
+
+示例输出：
+
+```text
+结论：中性偏多
+置信度：62%
+
+核心理由：
+1. 近一个月走势偏强。
+2. 价格仍在关键均线附近或上方。
+3. RSI 和 MACD 显示短线动能状态。
+4. 风险主要来自估值、财报预期和宏观风险。
+```
+
+## 4. MVP Agent 设计
+
+### Coordinator Agent
+
+职责：
+
+- 解析用户输入
+- 识别 ticker
+- 识别分析周期
+- 设定分析模块
+
+当前实现：
+
+- 支持常见中文公司名映射，例如英伟达、苹果、特斯拉、微软。
+- 支持直接输入美股 ticker，例如 NVDA、AAPL、TSLA。
+
+### Market Agent
+
+职责：
+
+- 使用 yfinance 获取历史行情
+- 计算最新价格、成交量、52 周区间和阶段涨跌幅
+
+当前实现：
+
+- 近 1 日、5 日、1 月、3 月、6 月涨跌幅
+- 最近 180 个交易日价格序列
+
+### Technical Agent
+
+职责：
+
+- 基于价格序列计算技术指标
+- 输出趋势状态
+
+当前实现：
+
+- MA5 / MA20 / MA60
+- RSI(14)
+- MACD / Signal / Histogram
+- 趋势标签
+
+### News & Risk Agent
+
+职责：
+
+- 获取近期新闻线索
+- 根据行情和技术面生成风险点
+
+当前实现：
+
+- 优先使用 yfinance 新闻
+- 如果新闻不可用，报告中明确说明暂无数据
+- 根据 RSI、近 1 月涨跌幅和通用金融风险生成风险清单
+
+### Report Agent
+
+职责：
+
+- 汇总所有 Agent 输出
+- 生成中文投研报告
+- 保存 Markdown 报告
+
+当前实现：
+
+- 有 OpenAI API key 时使用 LLM 生成报告
+- 没有 API key 时使用规则模板兜底
+- 自动保存到 `outputs/reports/`
+
+## 5. 当前技术架构
+
+```text
+Chainlit UI
+  ↓
+LangGraph Workflow
+  ↓
+Coordinator Agent
+  ↓
+Market Agent
+  ↓
+Technical Agent
+  ↓
+News & Risk Agent
+  ↓
+Report Agent
+  ↓
+中文报告 + Plotly 图表
+```
+
+## 6. 二期升级
+
+二期目标是把 MVP 从“短线分析助手”升级成“更像投研团队”的系统。
+
+新增 Agent：
+
+- **Bull Agent**：专门提出看多理由
+- **Bear Agent**：专门提出看空理由
+- **Investment Committee Agent**：比较多空观点，给出最终评级
+- **Fundamental Agent**：分析营收、利润、估值和财报指引
+
+新增能力：
+
+- SEC filings 检索
+- 财报电话会 transcript 检索
+- 公司基本面数据
+- 多空辩论过程展示
+- 报告导出 PDF
+
+## 7. 三期升级：RAG
+
+RAG 适合解决“历史资料和内部知识”问题。
+
+可加入的数据：
+
+- 财报 PDF
+- 10-K / 10-Q
+- 财报电话会 transcript
+- 行业研报摘要
+- 用户自己的投资笔记
+- 历史报告和历史决策日志
+
+推荐架构：
+
+```text
+Document Loader
+  ↓
+Chunking
+  ↓
+Embedding
+  ↓
+Vector DB
+  ↓
+Fundamental / Risk / Committee Agent
+```
+
+向量库选择：
+
+- 本地 MVP：Chroma / FAISS
+- 产品化：Qdrant / pgvector
+
+## 8. 四期升级：MCP
+
+MCP 可以作为统一工具层，让 Agent 不直接耦合外部服务。
+
+可拆分 MCP server：
+
+- `market-data-server`：行情、历史价格、估值数据
+- `news-server`：新闻搜索、新闻正文抓取
+- `filing-server`：SEC filings、财报检索
+- `rag-server`：向量检索
+- `report-server`：Markdown / PDF / 邮件导出
+
+目标架构：
+
+```text
+LangGraph Agents
+  ↓
+MCP Tool Layer
+  ↓
+Market / News / Filing / RAG / Report Services
+```
+
+## 9. 作品集表达
+
+可以在简历或项目介绍中这样写：
+
+> 构建了一个基于 LangGraph 和 Chainlit 的中文多 Agent 投研系统，模拟真实投研团队的分工协作流程。系统能够自动解析用户投资问题，调用行情和技术指标工具，并由多个专业 Agent 完成市场、技术面、风险审查和报告撰写，最终生成结构化中文投研报告。项目支持 LLM 报告生成、规则兜底、Agent 执行过程可视化，并预留 RAG 与 MCP 扩展接口。
+
+短版：
+
+> 一个能自动完成“识别股票、查行情、算指标、找风险、写报告”的 AI 投研团队。

@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.chainlit/
+outputs/reports/*.md
+outputs/reports/*.pdf
