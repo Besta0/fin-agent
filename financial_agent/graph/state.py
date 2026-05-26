@@ -13,6 +13,7 @@ class ResearchState(TypedDict, total=False):
     analysis_modules: list[str]
     market_data: dict[str, Any]
     technicals: dict[str, Any]
+    fundamentals: dict[str, Any]
     news: list[dict[str, Any]]
     risks: list[str]
     bull_case: dict[str, Any]

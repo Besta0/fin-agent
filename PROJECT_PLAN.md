@@ -15,7 +15,7 @@
 核心吸引力：
 
 - **多 Agent 分工直观**：不是一个黑盒聊天机器人，而是一个投研团队。
-- **流程可解释**：用户能看到 Coordinator、Market、Technical、Risk、Bull、Bear、Committee、Report 各自做了什么。
+- **流程可解释**：用户能看到 Coordinator、Market、Technical、Fundamental、Risk、Bull、Bear、Committee、Report 各自做了什么。
 - **数据和推理结合**：行情数据、技术指标和 LLM 总结形成闭环。
 - **适合展示工程能力**：覆盖 LangGraph、工具调用、结构化状态、Chainlit UI 和后续 RAG/MCP 扩展。
 - **可产品化**：未来可以扩展成 watchlist、日报、PDF 报告、财报 RAG 和 Next.js 工作台。
@@ -98,7 +98,21 @@
 
 - 优先使用 yfinance 新闻
 - 如果新闻不可用，报告中明确说明暂无数据
-- 根据 RSI、近 1 月涨跌幅和通用金融风险生成风险清单
+- 根据 RSI、近 1 月涨跌幅、基本面风险和通用金融风险生成风险清单
+
+### Fundamental Agent
+
+职责：
+
+- 获取估值、盈利能力、增长、分红和分析师预期
+- 生成基本面亮点和风险
+- 为 Bull / Bear / Committee 提供基本面信号
+
+当前实现：
+
+- 使用 `yfinance.Ticker(ticker).info` 和 `fast_info`
+- 输出市值、PE、Forward PE、PS、PB、EPS、营收增长、利润率、目标价、分析师一致预期等指标
+- 基于增长、利润率、估值和目标价生成结构化亮点与风险
 
 ### Bull Agent
 
@@ -110,7 +124,7 @@
 
 当前实现：
 
-- 基于近 5 日 / 1 月涨跌幅、均线趋势、RSI、MACD 和新闻热度生成规则型看多观点
+- 基于近 5 日 / 1 月涨跌幅、均线趋势、RSI、MACD、新闻热度和基本面亮点生成规则型看多观点
 - 即使 LLM 不可用，也能稳定输出结构化观点
 
 ### Bear Agent
@@ -123,7 +137,7 @@
 
 当前实现：
 
-- 基于近 1 日 / 5 日回撤、近 1 月涨幅、RSI、MACD 和风险清单生成规则型看空观点
+- 基于近 1 日 / 5 日回撤、近 1 月涨幅、RSI、MACD、估值压力和风险清单生成规则型看空观点
 
 ### Committee Agent
 
@@ -165,6 +179,8 @@ Market Agent
   ↓
 Technical Agent
   ↓
+Fundamental Agent
+  ↓
 News & Risk Agent
   ↓
 Bull Agent
@@ -184,7 +200,7 @@ Report Agent
 
 下一批新增 Agent：
 
-- **Fundamental Agent**：分析营收、利润、估值和财报指引
+- **Verifier Agent**：检查报告是否编造数据、是否与结构化数据矛盾
 
 新增能力：
 

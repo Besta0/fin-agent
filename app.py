@@ -10,6 +10,7 @@ AGENT_TITLES = {
     "coordinator": "Coordinator Agent",
     "market": "Market Agent",
     "technical": "Technical Agent",
+    "fundamental": "Fundamental Agent",
     "news_risk": "News & Risk Agent",
     "bull": "Bull Agent",
     "bear": "Bear Agent",
@@ -52,6 +53,34 @@ def _format_case(case: dict, argument_key: str = "arguments") -> str:
     return "\n".join(lines)
 
 
+def _format_fundamentals(fundamentals: dict) -> str:
+    if not fundamentals:
+        return "暂无基本面数据。"
+    if not fundamentals.get("ok"):
+        return f"基本面数据获取失败：{fundamentals.get('error', '未知错误')}"
+
+    rows = [
+        f"- 公司：**{fundamentals.get('company_name') or fundamentals.get('ticker', 'N/A')}**",
+        f"- 行业：**{fundamentals.get('sector') or 'N/A'} / {fundamentals.get('industry') or 'N/A'}**",
+        f"- 市值：**{fundamentals.get('market_cap_display') or 'N/A'} {fundamentals.get('currency') or ''}**",
+        f"- Trailing PE / Forward PE：**{fundamentals.get('trailing_pe') or 'N/A'} / {fundamentals.get('forward_pe') or 'N/A'}**",
+        f"- PS / PB：**{fundamentals.get('price_to_sales') or 'N/A'} / {fundamentals.get('price_to_book') or 'N/A'}**",
+        f"- 营收增长 / 净利率：**{fundamentals.get('revenue_growth_percent') or 'N/A'}% / {fundamentals.get('profit_margins_percent') or 'N/A'}%**",
+        f"- 分析师目标均价：**{fundamentals.get('target_mean_price') or 'N/A'}**",
+        f"- 一致预期：**{fundamentals.get('recommendation_key') or 'N/A'}**",
+        f"- 财报日期：**{fundamentals.get('earnings_date') or 'N/A'} ({fundamentals.get('earnings_date_context') or 'unknown'})**",
+    ]
+    highlights = fundamentals.get("highlights", [])
+    risks = fundamentals.get("risks", [])
+    if highlights:
+        rows.append("\n亮点：")
+        rows.extend(f"{idx}. {item}" for idx, item in enumerate(highlights[:3], start=1))
+    if risks:
+        rows.append("\n风险：")
+        rows.extend(f"{idx}. {item}" for idx, item in enumerate(risks[:3], start=1))
+    return "\n".join(rows)
+
+
 def _brief_update(node_name: str, update: dict) -> str:
     if node_name == "coordinator":
         ticker = update.get("ticker") or "未识别"
@@ -77,6 +106,9 @@ def _brief_update(node_name: str, update: dict) -> str:
             f"RSI：**{technicals.get('rsi_14', 'N/A')}**；"
             f"MACD 信号：**{technicals.get('macd_signal_label', 'N/A')}**。"
         )
+
+    if node_name == "fundamental":
+        return "### 基本面与估值\n" + _format_fundamentals(update.get("fundamentals", {}))
 
     if node_name == "news_risk":
         risks = update.get("risks", [])

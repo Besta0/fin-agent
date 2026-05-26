@@ -13,6 +13,7 @@
 - **Coordinator Agent**：识别股票、市场、分析周期和任务目标
 - **Market Agent**：获取价格、涨跌幅、成交量和区间表现
 - **Technical Agent**：计算 MA、RSI、MACD 等技术指标
+- **Fundamental Agent**：整理估值、盈利能力、增长和分析师预期
 - **News & Risk Agent**：整理近期新闻和主要风险
 - **Bull Agent**：形成看多论据
 - **Bear Agent**：形成看空论据
@@ -116,6 +117,8 @@ Market Agent
   ↓
 Technical Agent
   ↓
+Fundamental Agent
+  ↓
 News & Risk Agent
   ↓
 Bull Agent
@@ -132,7 +135,7 @@ Report Agent
 ## 后续升级方向
 
 - 接入 SEC filings、财报电话会 transcript 和研报 RAG
-- 加入 Fundamental Agent，补充估值和财报分析
+- 加入 Verifier Agent，检查报告是否和数据矛盾
 - 用 MCP 统一封装行情、新闻、财报和报告导出工具
 - 增加 watchlist、历史报告、定时日报
 - 从 Chainlit 升级到 Next.js / FastAPI 产品化前端

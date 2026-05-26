@@ -69,6 +69,42 @@ def _format_news(news: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _format_value(value, suffix: str = "") -> str:
+    if value is None or value == "":
+        return "N/A"
+    return f"{value}{suffix}"
+
+
+def _format_fundamentals(fundamentals: dict) -> str:
+    if not fundamentals:
+        return "暂无基本面数据。"
+    if not fundamentals.get("ok"):
+        return f"基本面数据获取失败：{fundamentals.get('error', '未知错误')}"
+
+    highlights = fundamentals.get("highlights", [])
+    risks = fundamentals.get("risks", [])
+    highlight_text = "\n".join(f"{idx}. {item}" for idx, item in enumerate(highlights[:4], start=1))
+    risk_text = "\n".join(f"{idx}. {item}" for idx, item in enumerate(risks[:4], start=1))
+
+    return f"""- 公司：**{fundamentals.get("company_name") or fundamentals.get("ticker", "N/A")}**
+- 行业：**{fundamentals.get("sector") or "N/A"} / {fundamentals.get("industry") or "N/A"}**
+- 市值：**{fundamentals.get("market_cap_display") or "N/A"} {fundamentals.get("currency") or ""}**
+- Trailing PE / Forward PE：**{_format_value(fundamentals.get("trailing_pe"))} / {_format_value(fundamentals.get("forward_pe"))}**
+- PS / PB：**{_format_value(fundamentals.get("price_to_sales"))} / {_format_value(fundamentals.get("price_to_book"))}**
+- EPS Trailing / Forward：**{_format_value(fundamentals.get("eps_trailing"))} / {_format_value(fundamentals.get("eps_forward"))}**
+- 营收增长：**{_format_value(fundamentals.get("revenue_growth_percent"), "%")}**
+- 净利率 / 毛利率：**{_format_value(fundamentals.get("profit_margins_percent"), "%")} / {_format_value(fundamentals.get("gross_margins_percent"), "%")}**
+- 分析师目标均价：**{_format_value(fundamentals.get("target_mean_price"))}**
+- 一致预期：**{fundamentals.get("recommendation_key") or "N/A"}**
+- 财报日期：**{fundamentals.get("earnings_date") or "N/A"} ({fundamentals.get("earnings_date_context") or "unknown"})**
+
+基本面亮点：
+{highlight_text or "暂无明确亮点。"}
+
+基本面风险：
+{risk_text or "暂无明确风险。"}"""
+
+
 def _format_research_case(title: str, case: dict, secondary_key: str) -> str:
     if not case:
         return f"### {title}\n\n暂无观点。"
@@ -133,6 +169,7 @@ def _fallback_report(state: ResearchState) -> str:
     horizon = state.get("horizon", "1 month")
     market_data = state.get("market_data", {})
     technicals = state.get("technicals", {})
+    fundamentals = state.get("fundamentals", {})
     risks = state.get("risks", [])
     news = state.get("news", [])
     bull_case = state.get("bull_case", {})
@@ -177,21 +214,25 @@ def _fallback_report(state: ResearchState) -> str:
 - RSI(14)：**{technicals.get("rsi_14", "N/A")}**
 - MACD：**{technicals.get("macd_signal_label", "N/A")}**
 
-## 4. 多空观点对比
+## 4. 基本面与估值
+
+{_format_fundamentals(fundamentals)}
+
+## 5. 多空观点对比
 
 {_format_research_case("Bull Agent 看多观点", bull_case, "weak_points")}
 
 {_format_research_case("Bear Agent 看空观点", bear_case, "rebuttals")}
 
-## 5. 新闻与催化
+## 6. 新闻与催化
 
 {_format_news(news)}
 
-## 6. 主要风险
+## 7. 主要风险
 
 {risk_text}
 
-## 7. 后续观察指标
+## 8. 后续观察指标
 
 1. 下一次财报中的收入增速、利润率和管理层指引。
 2. 股价能否站稳关键均线，以及成交量是否配合。
@@ -208,6 +249,7 @@ def _build_llm_prompt(state: ResearchState, fallback_rating: str, confidence: in
         "horizon": state.get("horizon"),
         "market_data": state.get("market_data"),
         "technicals": state.get("technicals"),
+        "fundamentals": state.get("fundamentals"),
         "news": state.get("news"),
         "risks": state.get("risks"),
         "bull_case": state.get("bull_case"),
@@ -228,6 +270,8 @@ def _build_llm_prompt(state: ResearchState, fallback_rating: str, confidence: in
 6. 新闻与催化部分如果有 link 字段，必须保留为 Markdown 链接。
 7. 必须包含“多空观点对比”部分，分别总结 Bull Agent 和 Bear Agent 的论据。
 8. 必须包含“投委会综合判断”部分，使用 committee_view 的 rating 和 confidence 作为最终结论。
+9. 必须包含“基本面与估值”部分，并说明哪些指标缺失。
+10. 如果 earnings_date_context 是 past，不要把 earnings_date 写成“下一次财报”。
 
 结构化数据：
 ```json

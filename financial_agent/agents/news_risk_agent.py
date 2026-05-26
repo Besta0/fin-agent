@@ -8,6 +8,7 @@ def _build_risks(state: ResearchState) -> list[str]:
     risks: list[str] = []
     market_data = state.get("market_data", {})
     technicals = state.get("technicals", {})
+    fundamentals = state.get("fundamentals", {})
     returns = market_data.get("returns", {})
 
     rsi = technicals.get("rsi_14")
@@ -21,6 +22,8 @@ def _build_risks(state: ResearchState) -> list[str]:
         risks.append("近一个月涨幅较大，若缺少新增催化，短期获利盘压力可能上升。")
     if isinstance(one_month_return, (int, float)) and one_month_return <= -15:
         risks.append("近一个月跌幅较大，市场可能正在重新定价基本面或宏观风险。")
+
+    risks.extend(fundamentals.get("risks", [])[:3])
 
     risks.extend(
         [
