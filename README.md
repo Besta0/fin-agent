@@ -1,116 +1,39 @@
-# Multi-Agent Research MVP
+# Fin Agent
 
-一个基于 **Chainlit + LangGraph** 的中文多 Agent 投研助手 MVP。
+一个基于 **Chainlit + LangGraph** 的中文多 Agent 投研助手。用户输入一句股票分析问题，系统会模拟一个小型投研团队，自动识别 ticker、拉取行情和基本面数据、计算技术指标、整理新闻线索、形成多空观点、给出投委会结论，并生成带质量检查的中文投研报告。
 
-项目目标：用户输入一句股票分析问题，系统模拟一个小型投研团队，完成任务解析、行情分析、技术指标计算、新闻/风险整理，并生成中文投研报告。
+> 免责声明：本项目仅用于学习、研究和 Agent 架构演示，不构成任何投资建议。
 
-> 免责声明：本项目仅用于学习和研究 Agent 架构，不构成投资建议。
+## 项目价值
 
-## 为什么这个项目有价值
+普通股票研究通常需要在行情网站、新闻网站、财报数据、图表工具和文档之间来回切换。这个项目把流程收敛成一个可解释的 Agent 工作流：
 
-普通投资研究通常需要在行情网站、新闻网站、财报页面和图表工具之间来回切换。这个项目把流程收敛成一个可解释的 Agent 工作流：
+- 数据层负责获取行情、新闻、基本面和技术指标
+- 分析层负责拆解任务、生成风险、多空观点和投委会结论
+- 写作层负责生成中文报告
+- 质检层负责检查报告是否和结构化数据矛盾
 
-- **Coordinator Agent**：识别股票、市场、分析周期和任务目标
-- **Market Agent**：获取价格、涨跌幅、成交量和区间表现
-- **Technical Agent**：计算 MA、RSI、MACD 等技术指标
-- **Fundamental Agent**：整理估值、盈利能力、增长和分析师预期
-- **News & Risk Agent**：整理近期新闻和主要风险
-- **Bull Agent**：形成看多论据
-- **Bear Agent**：形成看空论据
-- **Committee Agent**：比较多空强度并给出最终评级
-- **Report Agent**：生成结构化中文投研报告
-- **Verifier Agent**：检查报告一致性、风险措辞和资料线索
-
-它吸引人的地方不是“让 AI 猜涨跌”，而是把投研流程变成可追踪、可扩展、可展示的系统。
+它的核心不是“让 AI 猜涨跌”，而是把投研流程做成一个可追踪、可扩展、可展示的系统。
 
 ## 技术栈
 
-- Frontend: Chainlit
-- Agent Orchestration: LangGraph
-- Data: yfinance
-- Indicators: pandas
-- Charts: Plotly
-- LLM: OpenAI-compatible via `langchain-openai`
+- **Frontend**: Chainlit
+- **Workflow**: LangGraph
+- **LLM Adapter**: `langchain-openai`
+- **LLM Provider**: OpenAI / DeepSeek / MiniMax / OpenAI-compatible endpoint
+- **Market Data**: yfinance
+- **Indicators**: pandas
+- **Charts**: Plotly
+- **Language**: Python
 
-## 项目结构
-
-```text
-.
-├── app.py
-├── financial_agent
-│   ├── agents
-│   ├── graph
-│   ├── tools
-│   ├── cli.py
-│   ├── llm.py
-│   └── settings.py
-├── outputs
-│   └── reports
-├── requirements.txt
-└── .env.example
-```
-
-## 快速开始
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-cp .env.example .env
-```
-
-如果要使用 LLM 报告生成，在 `.env` 中设置一个 OpenAI-compatible provider。
-
-同一时间只启用一个 provider。想保留另一个 provider 的配置时，把它前面加 `#` 注释掉。
-
-OpenAI:
-
-```bash
-LLM_PROVIDER=openai
-OPENAI_API_KEY=your_openai_api_key
-LLM_MODEL=gpt-4o-mini
-LLM_BASE_URL=
-```
-
-DeepSeek:
-
-```bash
-LLM_PROVIDER=deepseek
-DEEPSEEK_API_KEY=your_deepseek_api_key
-LLM_MODEL=deepseek-v4-flash
-LLM_BASE_URL=https://api.deepseek.com
-DEEPSEEK_THINKING=disabled
-DEEPSEEK_REASONING_EFFORT=high
-```
-
-MiniMax:
-
-```bash
-LLM_PROVIDER=minimax
-MINIMAX_API_KEY=your_minimax_api_key
-LLM_MODEL=MiniMax-M2.7
-LLM_BASE_URL=https://api.minimax.io/v1
-MINIMAX_REASONING_SPLIT=false
-```
-
-启动 Chainlit：
-
-```bash
-chainlit run app.py
-```
-
-命令行测试：
-
-```bash
-python -m financial_agent.cli "帮我分析一下 NVDA 未来一个月走势"
-```
-
-## MVP 范围
-
-第一版重点是跑通完整闭环：
+## 总体架构
 
 ```text
-用户问题
+User
+  ↓
+Chainlit UI
+  ↓
+LangGraph Workflow
   ↓
 Coordinator Agent
   ↓
@@ -132,13 +55,417 @@ Report Agent
   ↓
 Verifier Agent
   ↓
-中文投研报告
+Final Report + Plotly Chart
 ```
 
-## 后续升级方向
+## Agent 设计
 
-- 接入 SEC filings、财报电话会 transcript 和研报 RAG
-- 加入历史报告 / 复盘 Agent，检查上次判断是否兑现
-- 用 MCP 统一封装行情、新闻、财报和报告导出工具
-- 增加 watchlist、历史报告、定时日报
-- 从 Chainlit 升级到 Next.js / FastAPI 产品化前端
+### Coordinator Agent
+
+文件：`financial_agent/agents/coordinator.py`
+
+职责：
+
+- 解析用户自然语言问题
+- 识别股票代码、公司名、市场和分析周期
+- 先用规则识别常见 ticker 和中文别名
+- 规则失败后调用 LLM fallback 自动识别 ticker
+- 如果 LLM 置信度不足，则提示用户输入明确 ticker
+
+输出字段：
+
+```python
+ticker
+company_name
+market
+horizon
+ticker_resolution
+```
+
+### Market Agent
+
+文件：`financial_agent/agents/market_agent.py`
+
+工具：`financial_agent/tools/market_data.py`
+
+职责：
+
+- 使用 yfinance 获取历史行情
+- 计算当前收盘价、成交量、52 周高低点
+- 计算 1 日、5 日、1 月、3 月、6 月涨跌幅
+- 输出最近 180 个交易日价格序列，供图表和技术指标使用
+
+输出字段：
+
+```python
+market_data
+```
+
+### Technical Agent
+
+文件：`financial_agent/agents/technical_agent.py`
+
+工具：`financial_agent/tools/indicators.py`
+
+职责：
+
+- 基于价格序列计算技术指标
+- 计算 MA5、MA20、MA60
+- 计算 RSI(14)
+- 计算 MACD、Signal、Histogram
+- 给出趋势标签和动能标签
+
+输出字段：
+
+```python
+technicals
+```
+
+### Fundamental Agent
+
+文件：`financial_agent/agents/fundamental_agent.py`
+
+工具：`financial_agent/tools/fundamentals.py`
+
+职责：
+
+- 使用 yfinance `info` 和 `fast_info` 获取基本面数据
+- 整理估值、增长、盈利能力、分红和分析师预期
+- 生成基本面亮点和风险
+- 支持 partial fallback：`info` 失败时尽量使用 `fast_info`
+
+输出字段：
+
+```python
+fundamentals
+```
+
+主要指标：
+
+- 市值
+- Trailing PE / Forward PE
+- PS / PB
+- EPS
+- 营收增长
+- 毛利率 / 净利率 / 经营利润率
+- 分红率
+- 分析师目标价
+- 分析师一致预期
+- 财报日期与 past/future 上下文
+
+### News & Risk Agent
+
+文件：`financial_agent/agents/news_risk_agent.py`
+
+工具：`financial_agent/tools/news.py`
+
+职责：
+
+- 使用 yfinance 新闻数据获取近期新闻线索
+- 提取标题、来源、日期和链接
+- 根据技术面、行情和基本面风险生成风险清单
+
+输出字段：
+
+```python
+news
+risks
+```
+
+### Bull Agent
+
+文件：`financial_agent/agents/bull_agent.py`
+
+职责：
+
+- 构建看多论据
+- 使用行情、趋势、RSI、MACD、新闻热度和基本面亮点
+- 输出看多置信度和看多观点薄弱点
+
+输出字段：
+
+```python
+bull_case
+```
+
+### Bear Agent
+
+文件：`financial_agent/agents/bear_agent.py`
+
+职责：
+
+- 构建看空论据
+- 使用短线回撤、MACD 转弱、估值压力、增长承压、目标价下行和风险清单
+- 输出看空置信度和看空观点反驳点
+
+输出字段：
+
+```python
+bear_case
+```
+
+### Committee Agent
+
+文件：`financial_agent/agents/committee_agent.py`
+
+职责：
+
+- 比较 Bull Agent 与 Bear Agent 的置信度和核心论据
+- 给出最终评级
+- 给出最终置信度
+- 总结最大不确定性
+
+评级范围：
+
+```text
+偏多 / 中性偏多 / 中性 / 中性偏空 / 偏空
+```
+
+输出字段：
+
+```python
+committee_view
+```
+
+### Report Agent
+
+文件：`financial_agent/agents/report_agent.py`
+
+职责：
+
+- 汇总所有结构化状态
+- 生成中文短线投研报告
+- 如果配置了 LLM，则使用模型生成报告
+- 如果没有配置 LLM，则使用规则模板兜底
+- 保存 Markdown 报告到 `outputs/reports/`
+
+报告包含：
+
+- 投资结论
+- 投委会综合判断
+- 行情摘要
+- 技术面判断
+- 基本面与估值
+- 多空观点对比
+- 新闻与催化
+- 主要风险
+- 后续观察指标
+- 资料线索
+
+### Verifier Agent
+
+文件：`financial_agent/agents/verifier_agent.py`
+
+职责：
+
+- 对最终报告做本地规则质检
+- 不额外调用 LLM，避免质检阶段产生新幻觉
+- 检查评级一致性、关键数字、财报日期语义、投资建议措辞和资料线索
+- 在报告末尾追加质量检查结果
+- 保存质检版报告到 `outputs/reports/*_verified_*.md`
+
+输出字段：
+
+```python
+verification
+```
+
+质量状态：
+
+```text
+pass / warning / fail
+```
+
+## 状态对象
+
+LangGraph 中的核心状态定义在 `financial_agent/graph/state.py`。
+
+```python
+class ResearchState(TypedDict, total=False):
+    user_query: str
+    ticker: str
+    company_name: str
+    market: str
+    horizon: str
+    ticker_resolution: dict[str, Any]
+    analysis_modules: list[str]
+    market_data: dict[str, Any]
+    technicals: dict[str, Any]
+    fundamentals: dict[str, Any]
+    news: list[dict[str, Any]]
+    risks: list[str]
+    bull_case: dict[str, Any]
+    bear_case: dict[str, Any]
+    committee_view: dict[str, Any]
+    verification: dict[str, Any]
+    agent_notes: list[dict[str, str]]
+    final_report: str
+    errors: list[str]
+```
+
+## 数据流
+
+```text
+user_query
+  ↓
+Coordinator: ticker / horizon
+  ↓
+Market: price series / returns
+  ↓
+Technical: MA / RSI / MACD
+  ↓
+Fundamental: valuation / growth / margins / analyst view
+  ↓
+News & Risk: news links / risk list
+  ↓
+Bull: bullish arguments
+  ↓
+Bear: bearish arguments
+  ↓
+Committee: final rating
+  ↓
+Report: markdown report
+  ↓
+Verifier: quality check
+```
+
+## 目录结构
+
+```text
+.
+├── app.py
+├── financial_agent
+│   ├── agents
+│   │   ├── bear_agent.py
+│   │   ├── bull_agent.py
+│   │   ├── committee_agent.py
+│   │   ├── coordinator.py
+│   │   ├── fundamental_agent.py
+│   │   ├── market_agent.py
+│   │   ├── news_risk_agent.py
+│   │   ├── report_agent.py
+│   │   ├── technical_agent.py
+│   │   └── verifier_agent.py
+│   ├── graph
+│   │   ├── state.py
+│   │   └── workflow.py
+│   ├── tools
+│   │   ├── charting.py
+│   │   ├── fundamentals.py
+│   │   ├── indicators.py
+│   │   ├── market_data.py
+│   │   └── news.py
+│   ├── cli.py
+│   ├── llm.py
+│   └── settings.py
+├── outputs
+│   └── reports
+├── PROJECT_PLAN.md
+├── requirements.txt
+└── .env.example
+```
+
+## 快速开始
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+cp .env.example .env
+```
+
+## LLM 配置
+
+如果要使用 LLM 报告生成，在 `.env` 中设置一个 OpenAI-compatible provider。
+
+同一时间只启用一个 provider。想保留另一个 provider 的配置时，把它前面加 `#` 注释掉。
+
+### OpenAI
+
+```bash
+LLM_PROVIDER=openai
+OPENAI_API_KEY=your_openai_api_key
+LLM_MODEL=gpt-4o-mini
+LLM_BASE_URL=
+```
+
+### DeepSeek
+
+```bash
+LLM_PROVIDER=deepseek
+DEEPSEEK_API_KEY=your_deepseek_api_key
+LLM_MODEL=deepseek-v4-flash
+LLM_BASE_URL=https://api.deepseek.com
+DEEPSEEK_THINKING=disabled
+DEEPSEEK_REASONING_EFFORT=high
+```
+
+### MiniMax
+
+```bash
+LLM_PROVIDER=minimax
+MINIMAX_API_KEY=your_minimax_api_key
+LLM_MODEL=MiniMax-M2.7
+LLM_BASE_URL=https://api.minimax.io/v1
+MINIMAX_REASONING_SPLIT=false
+```
+
+## 运行
+
+启动 Chainlit：
+
+```bash
+chainlit run app.py
+```
+
+打开：
+
+```text
+http://localhost:8000
+```
+
+命令行测试：
+
+```bash
+python -m financial_agent.cli "帮我分析一下 NVDA 未来一个月走势"
+```
+
+示例问题：
+
+```text
+帮我分析一下英伟达未来一个月走势
+帮我分析一下闪迪今天走势
+帮我看看博通未来一个月是偏多还是偏空
+```
+
+## 当前能力
+
+- 中文自然语言输入
+- 规则 + LLM fallback ticker 识别
+- 美股行情拉取
+- 技术指标计算
+- 基本面与估值整理
+- 新闻线索和来源链接展示
+- 多空观点生成
+- 投委会评级
+- 中文报告生成
+- 报告质量检查
+- Plotly 价格图展示
+- Markdown 报告保存
+
+## 已知限制
+
+- 数据主要来自 yfinance，数据完整性和稳定性取决于 Yahoo Finance
+- 基本面数据可能出现 partial fallback
+- 新闻质量取决于 yfinance 返回结果，可能包含相关但不完全聚焦的文章
+- Verifier 当前是规则质检，不会自动重写报告
+- 当前主要面向美股，A 股和港股 ticker 支持有限
+
+## 后续路线
+
+- Review Agent：读取历史报告，检查上次判断是否兑现
+- Watchlist：支持多股票跟踪
+- RAG：接入 10-K / 10-Q / earnings call transcript
+- MCP：统一封装行情、新闻、财报、RAG 和报告导出工具
+- PDF 导出
+- FastAPI + Next.js 产品化前端
