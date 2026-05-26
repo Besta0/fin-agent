@@ -140,6 +140,10 @@ def _format_portfolio(portfolio: dict) -> str:
 
 def _brief_update(node_name: str, update: dict) -> str:
     if node_name == "coordinator":
+        direct_response = update.get("direct_response")
+        if direct_response:
+            return direct_response
+
         ticker = update.get("ticker") or "未识别"
         horizon = update.get("horizon") or "默认周期"
         resolution = update.get("ticker_resolution", {})
@@ -255,7 +259,7 @@ async def on_message(message: cl.Message) -> None:
     graph = build_research_graph()
     latest_state: dict = {}
 
-    await cl.Message(content="收到，我会让几个 Agent 依次完成投研流程。").send()
+    await cl.Message(content="收到，我先判断问题类型和标的。").send()
 
     try:
         async for event in graph.astream(
@@ -276,6 +280,9 @@ async def on_message(message: cl.Message) -> None:
                 ).send()
     except Exception as exc:
         await cl.Message(content=f"运行 Agent 流程时出错：`{exc}`").send()
+        return
+
+    if latest_state.get("direct_response"):
         return
 
     final_report = latest_state.get("final_report")

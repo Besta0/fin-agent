@@ -5,6 +5,9 @@ from typing import Any, TypedDict
 
 class ResearchState(TypedDict, total=False):
     user_query: str
+    intent: str
+    should_continue: bool
+    direct_response: str
     ticker: str
     company_name: str
     market: str

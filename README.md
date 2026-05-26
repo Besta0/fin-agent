@@ -39,6 +39,7 @@ Intent Router
 LangGraph Workflow
   ↓
 Coordinator Agent
+  ├─ Missing ticker / non-research → Direct Response
   ↓
 Market Agent
   ↓
@@ -80,10 +81,15 @@ Final Report + Plotly Chart
 - 先用规则识别常见 ticker 和中文别名
 - 规则失败后调用 LLM fallback 自动识别 ticker
 - 如果 LLM 置信度不足，则提示用户输入明确 ticker
+- 如果问题不是股票投研请求，直接返回说明并停止后续 Agent
+- 如果问题像投研请求但没有明确 ticker，直接请用户补充标的并停止后续 Agent
 
 输出字段：
 
 ```python
+intent
+should_continue
+direct_response
 ticker
 company_name
 market
@@ -394,6 +400,8 @@ Intent Router: help intent or research intent
   ├─ Help Intent: capability guide / examples
   ↓
 Coordinator: ticker / horizon
+  ├─ Missing ticker: ask user for ticker and stop
+  ├─ Non-research: explain scope and stop
   ↓
 Market: price series / returns
   ↓
@@ -542,6 +550,7 @@ python -m financial_agent.cli "帮我分析一下 NVDA 未来一个月走势"
 
 - 中文自然语言输入
 - Help Intent：用户问“你能做什么 / 怎么用 / 帮助”时直接返回功能说明
+- 早停路由：无法识别 ticker 或问题不是股票投研时，不启动后续分析 Agent
 - 规则 + LLM fallback ticker 识别
 - 美股行情拉取
 - 技术指标计算

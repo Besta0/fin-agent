@@ -18,6 +18,12 @@ from financial_agent.agents.verifier_agent import verifier_node
 from financial_agent.graph.state import ResearchState
 
 
+def _route_after_coordinator(state: ResearchState) -> str:
+    if state.get("should_continue") and state.get("ticker"):
+        return "continue"
+    return "stop"
+
+
 def build_research_graph():
     workflow = StateGraph(ResearchState)
 
@@ -36,7 +42,14 @@ def build_research_graph():
     workflow.add_node("history", history_node)
 
     workflow.add_edge(START, "coordinator")
-    workflow.add_edge("coordinator", "market")
+    workflow.add_conditional_edges(
+        "coordinator",
+        _route_after_coordinator,
+        {
+            "continue": "market",
+            "stop": END,
+        },
+    )
     workflow.add_edge("market", "review")
     workflow.add_edge("review", "technical")
     workflow.add_edge("technical", "fundamental")

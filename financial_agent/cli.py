@@ -25,7 +25,7 @@ async def main() -> int:
             "errors": [],
         }
     )
-    print(state.get("final_report", "No report generated."))
+    print(state.get("direct_response") or state.get("final_report", "No report generated."))
     return 0
 
 

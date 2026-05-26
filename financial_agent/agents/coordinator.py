@@ -33,19 +33,110 @@ COMPANY_ALIASES = {
     "wdc": ("WDC", "Western Digital"),
 }
 
+RESEARCH_KEYWORDS = (
+    "股票",
+    "股价",
+    "代码",
+    "走势",
+    "分析",
+    "研究",
+    "投研",
+    "投资",
+    "市场",
+    "美股",
+    "港股",
+    "a股",
+    "财报",
+    "估值",
+    "基本面",
+    "技术面",
+    "新闻",
+    "风险",
+    "评级",
+    "目标价",
+    "看多",
+    "看空",
+    "偏多",
+    "偏空",
+    "买入",
+    "卖出",
+    "持仓",
+    "观察池",
+    "盘中",
+    "涨",
+    "跌",
+    "回撤",
+    "ticker",
+    "stock",
+    "share",
+    "price",
+    "earnings",
+    "valuation",
+    "revenue",
+    "risk",
+    "watchlist",
+)
+MARKET_TOKEN_BLOCKLIST = {"US", "USA", "HK", "HKG"}
 
-def _extract_ticker(query: str) -> tuple[str, str]:
+
+def _extract_alias(query: str) -> tuple[str, str]:
     lowered = query.lower()
     for alias, (ticker, company_name) in COMPANY_ALIASES.items():
         if alias in lowered or alias in query:
             return ticker, company_name
+    return "", ""
 
-    matches = re.findall(r"\b[A-Z]{1,5}(?:\.[A-Z])?\b", query.upper())
-    if matches:
-        ticker = matches[0]
+
+def _extract_ticker_token(query: str) -> tuple[str, str]:
+    pattern = re.compile(
+        r"(?<![A-Za-z0-9.])([A-Za-z]{1,5}(?:\.[A-Za-z])?)(?![A-Za-z0-9.])"
+    )
+    for match in pattern.finditer(query):
+        ticker = match.group(1).upper()
+        next_char = query[match.end() : match.end() + 1]
+        if ticker == "A" and next_char == "股":
+            continue
+        if ticker in MARKET_TOKEN_BLOCKLIST:
+            continue
         return ticker, ticker
 
     return "", ""
+
+
+def _is_symbol_only_query(query: str) -> bool:
+    return bool(re.fullmatch(r"\s*[A-Za-z]{1,5}(?:\.[A-Za-z])?\s*", query))
+
+
+def _looks_like_research_query(query: str) -> bool:
+    lowered = query.lower()
+    return any(keyword in lowered or keyword in query for keyword in RESEARCH_KEYWORDS)
+
+
+def _missing_ticker_response() -> str:
+    return """我理解你想做股票投研分析，但还没有识别出明确的公司或 ticker。
+
+为了避免后面的行情、技术面、基本面 Agent 跑偏，请你补充一个股票代码或公司名。
+
+你可以这样问：
+
+- 帮我分析一下 NVDA 未来一个月走势
+- 看看闪迪最近怎么样
+- 帮我分析一下特斯拉是偏多还是偏空
+- 帮我看一下微软最近的风险点"""
+
+
+def _non_research_response() -> str:
+    return """这个问题看起来不是股票、公司或市场投研请求，所以我不会启动后面的投研 Agent。
+
+我是 Fin Agent，当前主要负责股票投研分析。你可以给我一个公司名或 ticker，我会帮你拉取行情、分析技术面和基本面、整理新闻风险、生成多空观点、更新观察池并输出中文报告。
+
+你可以这样问：
+
+- 帮我分析一下 NVDA 未来一个月走势
+- 看看闪迪最近怎么样
+- 英伟达现在还值得继续跟踪吗
+
+如果你想了解我的能力，可以输入：你能做什么。"""
 
 
 def _clean_json(content: str) -> str:
@@ -125,25 +216,63 @@ def _extract_horizon(query: str) -> str:
 
 async def coordinator_node(state: ResearchState) -> ResearchState:
     query = state.get("user_query", "")
-    ticker, company_name = _extract_ticker(query)
+    alias_ticker, alias_company = _extract_alias(query)
+    research_like = _looks_like_research_query(query)
+
+    if alias_ticker:
+        ticker, company_name = alias_ticker, alias_company
+        research_like = True
+    elif research_like or _is_symbol_only_query(query):
+        ticker, company_name = _extract_ticker_token(query)
+    else:
+        ticker, company_name = "", ""
+
     horizon = _extract_horizon(query)
     resolution_method = "rules"
     resolution_confidence = 1.0 if ticker else 0.0
 
-    if not ticker:
+    if not ticker and research_like:
         ticker, company_name, resolution_confidence, resolution_method = await _extract_ticker_with_llm(query)
 
     errors = list(state.get("errors", []))
     if not ticker:
-        errors.append(
-            "Coordinator Agent 未能可靠识别股票代码，请在问题中加入 ticker，例如 NVDA、AAPL、SNDK。"
-        )
+        intent = "missing_ticker" if research_like else "non_research"
+        direct_response = _missing_ticker_response() if research_like else _non_research_response()
+        if research_like:
+            errors.append(
+                "Coordinator Agent 未能可靠识别股票代码，请在问题中加入 ticker，例如 NVDA、AAPL、SNDK。"
+            )
+        return {
+            "ticker": "",
+            "company_name": "",
+            "market": "US",
+            "horizon": horizon,
+            "intent": intent,
+            "should_continue": False,
+            "direct_response": direct_response,
+            "final_report": direct_response,
+            "ticker_resolution": {
+                "method": resolution_method,
+                "confidence": resolution_confidence,
+            },
+            "analysis_modules": [],
+            "errors": errors,
+            "agent_notes": [
+                *state.get("agent_notes", []),
+                {
+                    "agent": "Coordinator Agent",
+                    "summary": f"Stopped early with intent={intent}, ticker=N/A.",
+                },
+            ],
+        }
 
     return {
         "ticker": ticker,
         "company_name": company_name,
         "market": "US",
         "horizon": horizon,
+        "intent": "research",
+        "should_continue": True,
         "ticker_resolution": {
             "method": resolution_method,
             "confidence": resolution_confidence,

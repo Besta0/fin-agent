@@ -61,6 +61,8 @@
 
 - 支持常见中文公司名映射，例如英伟达、苹果、特斯拉、微软。
 - 支持直接输入美股 ticker，例如 NVDA、AAPL、TSLA。
+- 如果问题不是股票投研请求，直接返回范围说明，不启动后续 Agent。
+- 如果问题像投研请求但缺少明确 ticker，直接请用户补充标的，不启动后续 Agent。
 
 ### Market Agent
 
@@ -237,6 +239,7 @@ Intent Router
 LangGraph Workflow
   ↓
 Coordinator Agent
+  ├─ Missing ticker / non-research → 直接回复并结束
   ↓
 Market Agent
   ↓
