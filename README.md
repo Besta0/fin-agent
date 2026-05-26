@@ -39,6 +39,8 @@ Coordinator Agent
   ↓
 Market Agent
   ↓
+Review Agent
+  ↓
 Technical Agent
   ↓
 Fundamental Agent
@@ -54,6 +56,8 @@ Committee Agent
 Report Agent
   ↓
 Verifier Agent
+  ↓
+History Agent
   ↓
 Final Report + Plotly Chart
 ```
@@ -99,6 +103,25 @@ ticker_resolution
 
 ```python
 market_data
+```
+
+### Review Agent
+
+文件：`financial_agent/agents/review_agent.py`
+
+工具：`financial_agent/tools/history.py`
+
+职责：
+
+- 读取同 ticker 最近一次历史记录
+- 对比上次价格和当前价格
+- 判断上次评级是否基本兑现
+- 给本次分析提供复盘提醒
+
+输出字段：
+
+```python
+review
 ```
 
 ### Technical Agent
@@ -276,6 +299,32 @@ verification
 pass / warning / fail
 ```
 
+### History Agent
+
+文件：`financial_agent/agents/history_agent.py`
+
+工具：`financial_agent/tools/history.py`
+
+职责：
+
+- 在 Verifier Agent 之后保存本次分析记录
+- 使用本地 JSONL 文件作为轻量历史库
+- 每个 ticker 一个文件：`outputs/history/{ticker}.jsonl`
+
+保存字段：
+
+```python
+timestamp
+ticker
+company_name
+horizon
+price
+rating
+confidence
+verification_status
+report_path
+```
+
 ## 状态对象
 
 LangGraph 中的核心状态定义在 `financial_agent/graph/state.py`。
@@ -290,6 +339,7 @@ class ResearchState(TypedDict, total=False):
     ticker_resolution: dict[str, Any]
     analysis_modules: list[str]
     market_data: dict[str, Any]
+    review: dict[str, Any]
     technicals: dict[str, Any]
     fundamentals: dict[str, Any]
     news: list[dict[str, Any]]
@@ -298,6 +348,7 @@ class ResearchState(TypedDict, total=False):
     bear_case: dict[str, Any]
     committee_view: dict[str, Any]
     verification: dict[str, Any]
+    history_record: dict[str, Any]
     agent_notes: list[dict[str, str]]
     final_report: str
     errors: list[str]
@@ -311,6 +362,8 @@ user_query
 Coordinator: ticker / horizon
   ↓
 Market: price series / returns
+  ↓
+Review: previous rating / price performance
   ↓
 Technical: MA / RSI / MACD
   ↓
@@ -327,6 +380,8 @@ Committee: final rating
 Report: markdown report
   ↓
 Verifier: quality check
+  ↓
+History: append JSONL record
 ```
 
 ## 目录结构
@@ -344,14 +399,17 @@ Verifier: quality check
 │   │   ├── market_agent.py
 │   │   ├── news_risk_agent.py
 │   │   ├── report_agent.py
+│   │   ├── review_agent.py
 │   │   ├── technical_agent.py
-│   │   └── verifier_agent.py
+│   │   ├── verifier_agent.py
+│   │   └── history_agent.py
 │   ├── graph
 │   │   ├── state.py
 │   │   └── workflow.py
 │   ├── tools
 │   │   ├── charting.py
 │   │   ├── fundamentals.py
+│   │   ├── history.py
 │   │   ├── indicators.py
 │   │   ├── market_data.py
 │   │   └── news.py
@@ -450,6 +508,7 @@ python -m financial_agent.cli "帮我分析一下 NVDA 未来一个月走势"
 - 投委会评级
 - 中文报告生成
 - 报告质量检查
+- 历史报告复盘
 - Plotly 价格图展示
 - Markdown 报告保存
 
@@ -459,11 +518,11 @@ python -m financial_agent.cli "帮我分析一下 NVDA 未来一个月走势"
 - 基本面数据可能出现 partial fallback
 - 新闻质量取决于 yfinance 返回结果，可能包含相关但不完全聚焦的文章
 - Verifier 当前是规则质检，不会自动重写报告
+- 历史记录当前使用本地 JSONL，不支持多用户隔离
 - 当前主要面向美股，A 股和港股 ticker 支持有限
 
 ## 后续路线
 
-- Review Agent：读取历史报告，检查上次判断是否兑现
 - Watchlist：支持多股票跟踪
 - RAG：接入 10-K / 10-Q / earnings call transcript
 - MCP：统一封装行情、新闻、财报、RAG 和报告导出工具

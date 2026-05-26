@@ -12,6 +12,7 @@ class ResearchState(TypedDict, total=False):
     ticker_resolution: dict[str, Any]
     analysis_modules: list[str]
     market_data: dict[str, Any]
+    review: dict[str, Any]
     technicals: dict[str, Any]
     fundamentals: dict[str, Any]
     news: list[dict[str, Any]]
@@ -20,6 +21,7 @@ class ResearchState(TypedDict, total=False):
     bear_case: dict[str, Any]
     committee_view: dict[str, Any]
     verification: dict[str, Any]
+    history_record: dict[str, Any]
     agent_notes: list[dict[str, str]]
     final_report: str
     errors: list[str]

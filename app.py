@@ -9,6 +9,7 @@ from financial_agent.tools.charting import build_price_chart
 AGENT_TITLES = {
     "coordinator": "Coordinator Agent",
     "market": "Market Agent",
+    "review": "Review Agent",
     "technical": "Technical Agent",
     "fundamental": "Fundamental Agent",
     "news_risk": "News & Risk Agent",
@@ -17,6 +18,7 @@ AGENT_TITLES = {
     "committee": "Committee Agent",
     "report": "Report Agent",
     "verifier": "Verifier Agent",
+    "history": "History Agent",
 }
 
 
@@ -82,6 +84,25 @@ def _format_fundamentals(fundamentals: dict) -> str:
     return "\n".join(rows)
 
 
+def _format_review(review: dict) -> str:
+    if not review:
+        return "暂无复盘信息。"
+    if not review.get("has_history"):
+        return f"{review.get('summary', '暂无历史报告。')}\n\n{review.get('reminder', '')}".strip()
+
+    return (
+        f"{review.get('summary', '')}\n\n"
+        f"- 上次时间：**{review.get('previous_timestamp') or 'N/A'}**\n"
+        f"- 上次评级：**{review.get('previous_rating') or 'N/A'}** "
+        f"({review.get('previous_confidence') or 'N/A'}%)\n"
+        f"- 上次价格 / 当前价格：**{review.get('previous_price') or 'N/A'} / "
+        f"{review.get('current_price') or 'N/A'}**\n"
+        f"- 期间涨跌幅：**{review.get('return_percent') if review.get('return_percent') is not None else 'N/A'}%**\n"
+        f"- 兑现情况：**{review.get('performance_label') or 'N/A'}**\n"
+        f"- 提醒：{review.get('reminder') or '暂无'}"
+    )
+
+
 def _brief_update(node_name: str, update: dict) -> str:
     if node_name == "coordinator":
         ticker = update.get("ticker") or "未识别"
@@ -99,6 +120,9 @@ def _brief_update(node_name: str, update: dict) -> str:
         price = market_data.get("last_close")
         change = market_data.get("returns", {}).get("1d")
         return f"已获取行情数据。最新收盘价：**{price}**；近 1 日涨跌幅：**{change}%**。"
+
+    if node_name == "review":
+        return "### 历史复盘\n" + _format_review(update.get("review", {}))
 
     if node_name == "technical":
         technicals = update.get("technicals", {})
@@ -160,6 +184,15 @@ def _brief_update(node_name: str, update: dict) -> str:
             f"发现问题：**{len(issues)}** 个。\n\n"
             f"### 问题\n{issue_text or '未发现明显问题。'}\n\n"
             f"### 建议\n{suggestion_text or '暂无。'}"
+        )
+
+    if node_name == "history":
+        record = update.get("history_record", {})
+        return (
+            f"已保存历史记录：`{record.get('history_path', 'N/A')}`\n\n"
+            f"- 标的：**{record.get('ticker', 'N/A')}**\n"
+            f"- 评级：**{record.get('rating', 'N/A')}**\n"
+            f"- 价格：**{record.get('price', 'N/A')}**"
         )
 
     return "节点已完成。"

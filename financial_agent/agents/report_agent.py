@@ -105,6 +105,20 @@ def _format_fundamentals(fundamentals: dict) -> str:
 {risk_text or "暂无明确风险。"}"""
 
 
+def _format_review(review: dict) -> str:
+    if not review:
+        return "暂无历史复盘信息。"
+    if not review.get("has_history"):
+        return f"{review.get('summary', '暂无历史报告。')}\n\n{review.get('reminder', '')}".strip()
+    return f"""- 上次时间：**{review.get("previous_timestamp") or "N/A"}**
+- 上次评级：**{review.get("previous_rating") or "N/A"}**
+- 上次置信度：**{review.get("previous_confidence") or "N/A"}%**
+- 上次价格 / 当前价格：**{review.get("previous_price") or "N/A"} / {review.get("current_price") or "N/A"}**
+- 期间涨跌幅：**{review.get("return_percent") if review.get("return_percent") is not None else "N/A"}%**
+- 兑现情况：**{review.get("performance_label") or "N/A"}**
+- 复盘提醒：{review.get("reminder") or "暂无"}"""
+
+
 def _format_research_case(title: str, case: dict, secondary_key: str) -> str:
     if not case:
         return f"### {title}\n\n暂无观点。"
@@ -168,6 +182,7 @@ def _fallback_report(state: ResearchState) -> str:
     company_name = state.get("company_name") or ticker
     horizon = state.get("horizon", "1 month")
     market_data = state.get("market_data", {})
+    review = state.get("review", {})
     technicals = state.get("technicals", {})
     fundamentals = state.get("fundamentals", {})
     risks = state.get("risks", [])
@@ -197,7 +212,11 @@ def _fallback_report(state: ResearchState) -> str:
 
 {_format_committee_view(committee_view)}
 
-## 2. 行情摘要
+## 2. 历史复盘
+
+{_format_review(review)}
+
+## 3. 行情摘要
 
 - 最新收盘价：**{price}**
 - 最新成交量：**{volume}**
@@ -206,7 +225,7 @@ def _fallback_report(state: ResearchState) -> str:
 - 近 1 月涨跌幅：**{returns.get("1m", "N/A")}%**
 - 近 3 月涨跌幅：**{returns.get("3m", "N/A")}%**
 
-## 3. 技术面判断
+## 4. 技术面判断
 
 - 趋势：**{technicals.get("trend_label", "暂无判断")}**
 - MA20：**{technicals.get("ma_20", "N/A")}**
@@ -214,27 +233,27 @@ def _fallback_report(state: ResearchState) -> str:
 - RSI(14)：**{technicals.get("rsi_14", "N/A")}**
 - MACD：**{technicals.get("macd_signal_label", "N/A")}**
 
-## 4. 基本面与估值
+## 5. 基本面与估值
 
 {_format_fundamentals(fundamentals)}
 
-## 5. 多空观点对比
+## 6. 多空观点对比
 
 {_format_research_case("Bull Agent 看多观点", bull_case, "weak_points")}
 
 {_format_research_case("Bear Agent 看空观点", bear_case, "rebuttals")}
 
-## 6. 新闻与催化
+## 7. 新闻与催化
 
 {_format_news(news)}
 
-## 7. 主要风险
+## 8. 主要风险
 
 {risk_text}
 
-## 8. 后续观察指标
+## 9. 后续观察指标
 
-1. 下一次财报中的收入增速、利润率和管理层指引。
+1. 后续财报或已发布财报中的收入增速、利润率和管理层指引。
 2. 股价能否站稳关键均线，以及成交量是否配合。
 3. 分析师评级、监管政策和行业需求是否出现方向性变化。
 4. 若短期涨幅较大，需要观察获利盘压力和估值消化情况。
@@ -247,6 +266,7 @@ def _build_llm_prompt(state: ResearchState, fallback_rating: str, confidence: in
         "company_name": state.get("company_name"),
         "market": state.get("market"),
         "horizon": state.get("horizon"),
+        "review": state.get("review"),
         "market_data": state.get("market_data"),
         "technicals": state.get("technicals"),
         "fundamentals": state.get("fundamentals"),
@@ -272,6 +292,7 @@ def _build_llm_prompt(state: ResearchState, fallback_rating: str, confidence: in
 8. 必须包含“投委会综合判断”部分，使用 committee_view 的 rating 和 confidence 作为最终结论。
 9. 必须包含“基本面与估值”部分，并说明哪些指标缺失。
 10. 如果 earnings_date_context 是 past，不要把 earnings_date 写成“下一次财报”。
+11. 如果 review.has_history 为 true，必须包含“历史复盘”部分；如果为 false，说明本次是首条记录。
 
 结构化数据：
 ```json

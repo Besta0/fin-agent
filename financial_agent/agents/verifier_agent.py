@@ -81,14 +81,21 @@ def _check_rating(report: str, state: ResearchState, issues: list[dict[str, str]
         )
         return
 
-    rating_mentions = [rating for rating in RATING_ORDER if rating in report]
-    contradictory = [rating for rating in rating_mentions if rating != expected]
+    conclusion_lines = [
+        line
+        for line in report.splitlines()
+        if any(keyword in line for keyword in ("最终评级", "投委会评级", "结论", "评级："))
+        and "分析师" not in line
+    ]
+    contradictory = []
+    for line in conclusion_lines:
+        contradictory.extend(rating for rating in RATING_ORDER if rating in line and rating != expected)
     if contradictory:
         issues.append(
             _issue(
                 "medium",
                 "rating_consistency",
-                f"报告中同时出现了其他评级词：{', '.join(contradictory)}。请确认是否为多空讨论而非最终结论。",
+                f"最终结论相关行中出现了其他评级词：{', '.join(sorted(set(contradictory)))}。请确认是否为多空讨论而非最终结论。",
             )
         )
 
@@ -146,25 +153,39 @@ def _check_earnings_date(report: str, state: ResearchState, issues: list[dict[st
         return
 
     suspicious_patterns = ["下一次财报", "即将公布的财报", "即将发布的财报", "未来财报日期"]
-    found = [pattern for pattern in suspicious_patterns if pattern in report]
+    sentences = re.split(r"[。！？\n]", report)
+    found: list[str] = []
+    for sentence in sentences:
+        if any(negation in sentence for negation in ("不涉及", "不是", "不要", "不会", "不能", "不应")):
+            continue
+        for pattern in suspicious_patterns:
+            if pattern in sentence:
+                found.append(pattern)
     if found:
         issues.append(
             _issue(
                 "high",
                 "date_consistency",
-                f"财报日期上下文为 past，但报告出现未来财报表述：{', '.join(found)}。",
+                f"财报日期上下文为 past，但报告出现未来财报表述：{', '.join(sorted(set(found)))}。",
             )
         )
 
 
 def _check_advice_language(report: str, issues: list[dict[str, str]]) -> None:
-    found = [phrase for phrase in PROHIBITED_ADVICE if phrase in report]
+    found: list[str] = []
+    sentences = re.split(r"[。！？\n]", report)
+    for sentence in sentences:
+        if any(context in sentence for context in ("分析师", "一致预期", "共识", "评级为", "评级")):
+            continue
+        for phrase in PROHIBITED_ADVICE:
+            if phrase in sentence:
+                found.append(phrase)
     if found:
         issues.append(
             _issue(
                 "high",
                 "investment_advice",
-                f"报告出现可能构成直接投资建议的措辞：{', '.join(found)}。",
+                f"报告出现可能构成直接投资建议的措辞：{', '.join(sorted(set(found)))}。",
             )
         )
 
@@ -235,6 +256,7 @@ async def verifier_node(state: ResearchState) -> ResearchState:
     final_report = f"{report.rstrip()}\n\n{verification_section}" if report else verification_section
     ticker = state.get("ticker") or "unknown"
     verified_path = _save_verified_report(ticker, final_report)
+    verification["report_path"] = verified_path
 
     return {
         "verification": verification,

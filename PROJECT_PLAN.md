@@ -15,7 +15,7 @@
 核心吸引力：
 
 - **多 Agent 分工直观**：不是一个黑盒聊天机器人，而是一个投研团队。
-- **流程可解释**：用户能看到 Coordinator、Market、Technical、Fundamental、Risk、Bull、Bear、Committee、Report、Verifier 各自做了什么。
+- **流程可解释**：用户能看到 Coordinator、Market、Review、Technical、Fundamental、Risk、Bull、Bear、Committee、Report、Verifier、History 各自做了什么。
 - **数据和推理结合**：行情数据、技术指标和 LLM 总结形成闭环。
 - **适合展示工程能力**：覆盖 LangGraph、工具调用、结构化状态、Chainlit UI 和后续 RAG/MCP 扩展。
 - **可产品化**：未来可以扩展成 watchlist、日报、PDF 报告、财报 RAG 和 Next.js 工作台。
@@ -72,6 +72,21 @@
 
 - 近 1 日、5 日、1 月、3 月、6 月涨跌幅
 - 最近 180 个交易日价格序列
+
+### Review Agent
+
+职责：
+
+- 读取同 ticker 最近一次历史记录
+- 对比上次评级、上次价格和当前价格
+- 判断上次观点是否兑现
+- 给本次分析提供复盘提醒
+
+当前实现：
+
+- 使用本地 `outputs/history/{ticker}.jsonl`
+- 如果没有历史记录，输出“本次为首条记录”
+- 如果有历史记录，输出上次评级、上次价格、当前价格、期间涨跌幅和兑现情况
 
 ### Technical Agent
 
@@ -181,6 +196,18 @@
 - 输出 `pass` / `warning` / `fail`
 - 将质检后的报告保存为 `outputs/reports/*_verified_*.md`
 
+### History Agent
+
+职责：
+
+- 在质检完成后保存本次分析摘要
+- 为下一次 Review Agent 复盘提供输入
+
+当前实现：
+
+- 每个 ticker 使用一个 JSONL 文件
+- 保存 timestamp、ticker、horizon、price、rating、confidence、verification_status 和 report_path
+
 ## 5. 当前技术架构
 
 ```text
@@ -191,6 +218,8 @@ LangGraph Workflow
 Coordinator Agent
   ↓
 Market Agent
+  ↓
+Review Agent
   ↓
 Technical Agent
   ↓
@@ -208,6 +237,8 @@ Report Agent
   ↓
 Verifier Agent
   ↓
+History Agent
+  ↓
 中文报告 + Plotly 图表
 ```
 
@@ -217,7 +248,7 @@ Verifier Agent
 
 下一批新增 Agent：
 
-- **Review Agent**：读取历史报告，检查上次判断是否兑现
+- **Watchlist Agent**：支持批量跟踪多个股票
 
 新增能力：
 

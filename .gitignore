@@ -7,3 +7,4 @@ __pycache__/
 chainlit.md
 outputs/reports/*.md
 outputs/reports/*.pdf
+outputs/history/*.jsonl
