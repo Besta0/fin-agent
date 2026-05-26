@@ -3,6 +3,7 @@ from __future__ import annotations
 import chainlit as cl
 
 from financial_agent.graph.workflow import build_research_graph
+from financial_agent.help import HELP_MESSAGE, is_help_intent
 from financial_agent.tools.charting import build_price_chart
 
 
@@ -237,12 +238,7 @@ def _brief_update(node_name: str, update: dict) -> str:
 
 @cl.on_chat_start
 async def on_chat_start() -> None:
-    await cl.Message(
-        content=(
-            "你好，我是一个多 Agent 投研助手 MVP。\n\n"
-            "你可以这样问：`帮我分析一下 NVDA 未来一个月走势`。"
-        )
-    ).send()
+    await cl.Message(content=HELP_MESSAGE).send()
 
 
 @cl.on_message
@@ -250,6 +246,10 @@ async def on_message(message: cl.Message) -> None:
     user_query = message.content.strip()
     if not user_query:
         await cl.Message(content="请输入一个股票分析问题，比如：`分析一下 AAPL 最近走势`。").send()
+        return
+
+    if is_help_intent(user_query):
+        await cl.Message(content=HELP_MESSAGE).send()
         return
 
     graph = build_research_graph()

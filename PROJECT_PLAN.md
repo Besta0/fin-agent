@@ -16,6 +16,7 @@
 
 - **多 Agent 分工直观**：不是一个黑盒聊天机器人，而是一个投研团队。
 - **流程可解释**：用户能看到 Coordinator、Market、Review、Technical、Fundamental、Risk、Bull、Bear、Committee、Portfolio、Report、Verifier、History 各自做了什么。
+- **新手友好**：用户问“你能做什么 / 怎么用 / 帮助”时，系统直接返回能力说明和示例问题，不会误进入投研流程。
 - **数据和推理结合**：行情数据、技术指标和 LLM 总结形成闭环。
 - **适合展示工程能力**：覆盖 LangGraph、工具调用、结构化状态、Chainlit UI 和后续 RAG/MCP 扩展。
 - **可产品化**：观察池、历史复盘、日报、PDF 报告、财报 RAG 和 Next.js 工作台都可以沿着同一套状态流继续扩展。
@@ -229,6 +230,9 @@
 
 ```text
 Chainlit UI
+  ↓
+Intent Router
+  ├─ Help Intent → 能力说明和示例问题
   ↓
 LangGraph Workflow
   ↓

@@ -33,6 +33,9 @@ User
   ↓
 Chainlit UI
   ↓
+Intent Router
+  ├─ Help Intent → Capability Guide
+  ↓
 LangGraph Workflow
   ↓
 Coordinator Agent
@@ -387,6 +390,9 @@ class ResearchState(TypedDict, total=False):
 ```text
 user_query
   ↓
+Intent Router: help intent or research intent
+  ├─ Help Intent: capability guide / examples
+  ↓
 Coordinator: ticker / horizon
   ↓
 Market: price series / returns
@@ -446,6 +452,7 @@ History: append JSONL record
 │   │   ├── news.py
 │   │   └── watchlist.py
 │   ├── cli.py
+│   ├── help.py
 │   ├── llm.py
 │   └── settings.py
 ├── outputs
@@ -525,6 +532,7 @@ python -m financial_agent.cli "帮我分析一下 NVDA 未来一个月走势"
 示例问题：
 
 ```text
+你能做什么
 帮我分析一下英伟达未来一个月走势
 帮我分析一下闪迪今天走势
 帮我看看博通未来一个月是偏多还是偏空
@@ -533,6 +541,7 @@ python -m financial_agent.cli "帮我分析一下 NVDA 未来一个月走势"
 ## 当前能力
 
 - 中文自然语言输入
+- Help Intent：用户问“你能做什么 / 怎么用 / 帮助”时直接返回功能说明
 - 规则 + LLM fallback ticker 识别
 - 美股行情拉取
 - 技术指标计算
