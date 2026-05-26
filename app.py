@@ -16,6 +16,7 @@ AGENT_TITLES = {
     "bear": "Bear Agent",
     "committee": "Committee Agent",
     "report": "Report Agent",
+    "verifier": "Verifier Agent",
 }
 
 
@@ -142,6 +143,24 @@ def _brief_update(node_name: str, update: dict) -> str:
 
     if node_name == "report":
         return "中文投研报告已生成。"
+
+    if node_name == "verifier":
+        verification = update.get("verification", {})
+        issues = verification.get("issues", [])
+        suggestions = verification.get("suggestions", [])
+        issue_text = "\n".join(
+            f"{idx}. [{issue.get('severity')}] {issue.get('message')}"
+            for idx, issue in enumerate(issues[:5], start=1)
+        )
+        suggestion_text = "\n".join(
+            f"{idx}. {suggestion}" for idx, suggestion in enumerate(suggestions[:5], start=1)
+        )
+        return (
+            f"质量检查状态：**{verification.get('status', 'unknown')}**；"
+            f"发现问题：**{len(issues)}** 个。\n\n"
+            f"### 问题\n{issue_text or '未发现明显问题。'}\n\n"
+            f"### 建议\n{suggestion_text or '暂无。'}"
+        )
 
     return "节点已完成。"
 

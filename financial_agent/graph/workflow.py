@@ -11,6 +11,7 @@ from financial_agent.agents.market_agent import market_node
 from financial_agent.agents.news_risk_agent import news_risk_node
 from financial_agent.agents.report_agent import report_node
 from financial_agent.agents.technical_agent import technical_node
+from financial_agent.agents.verifier_agent import verifier_node
 from financial_agent.graph.state import ResearchState
 
 
@@ -26,6 +27,7 @@ def build_research_graph():
     workflow.add_node("bear", bear_node)
     workflow.add_node("committee", committee_node)
     workflow.add_node("report", report_node)
+    workflow.add_node("verifier", verifier_node)
 
     workflow.add_edge(START, "coordinator")
     workflow.add_edge("coordinator", "market")
@@ -36,6 +38,7 @@ def build_research_graph():
     workflow.add_edge("bull", "bear")
     workflow.add_edge("bear", "committee")
     workflow.add_edge("committee", "report")
-    workflow.add_edge("report", END)
+    workflow.add_edge("report", "verifier")
+    workflow.add_edge("verifier", END)
 
     return workflow.compile()

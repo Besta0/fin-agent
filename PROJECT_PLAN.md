@@ -15,7 +15,7 @@
 核心吸引力：
 
 - **多 Agent 分工直观**：不是一个黑盒聊天机器人，而是一个投研团队。
-- **流程可解释**：用户能看到 Coordinator、Market、Technical、Fundamental、Risk、Bull、Bear、Committee、Report 各自做了什么。
+- **流程可解释**：用户能看到 Coordinator、Market、Technical、Fundamental、Risk、Bull、Bear、Committee、Report、Verifier 各自做了什么。
 - **数据和推理结合**：行情数据、技术指标和 LLM 总结形成闭环。
 - **适合展示工程能力**：覆盖 LangGraph、工具调用、结构化状态、Chainlit UI 和后续 RAG/MCP 扩展。
 - **可产品化**：未来可以扩展成 watchlist、日报、PDF 报告、财报 RAG 和 Next.js 工作台。
@@ -166,6 +166,21 @@
 - 没有 API key 时使用规则模板兜底
 - 自动保存到 `outputs/reports/`
 
+### Verifier Agent
+
+职责：
+
+- 检查最终报告是否和结构化数据矛盾
+- 检查投委会评级是否被保留
+- 检查财报日期语义、投资建议措辞、资料线索和关键数字
+- 在报告末尾追加质量检查结果
+
+当前实现：
+
+- 使用本地规则检查，不额外调用 LLM
+- 输出 `pass` / `warning` / `fail`
+- 将质检后的报告保存为 `outputs/reports/*_verified_*.md`
+
 ## 5. 当前技术架构
 
 ```text
@@ -191,6 +206,8 @@ Committee Agent
   ↓
 Report Agent
   ↓
+Verifier Agent
+  ↓
 中文报告 + Plotly 图表
 ```
 
@@ -200,7 +217,7 @@ Report Agent
 
 下一批新增 Agent：
 
-- **Verifier Agent**：检查报告是否编造数据、是否与结构化数据矛盾
+- **Review Agent**：读取历史报告，检查上次判断是否兑现
 
 新增能力：
 

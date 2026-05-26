@@ -19,6 +19,7 @@
 - **Bear Agent**：形成看空论据
 - **Committee Agent**：比较多空强度并给出最终评级
 - **Report Agent**：生成结构化中文投研报告
+- **Verifier Agent**：检查报告一致性、风险措辞和资料线索
 
 它吸引人的地方不是“让 AI 猜涨跌”，而是把投研流程变成可追踪、可扩展、可展示的系统。
 
@@ -129,13 +130,15 @@ Committee Agent
   ↓
 Report Agent
   ↓
+Verifier Agent
+  ↓
 中文投研报告
 ```
 
 ## 后续升级方向
 
 - 接入 SEC filings、财报电话会 transcript 和研报 RAG
-- 加入 Verifier Agent，检查报告是否和数据矛盾
+- 加入历史报告 / 复盘 Agent，检查上次判断是否兑现
 - 用 MCP 统一封装行情、新闻、财报和报告导出工具
 - 增加 watchlist、历史报告、定时日报
 - 从 Chainlit 升级到 Next.js / FastAPI 产品化前端
