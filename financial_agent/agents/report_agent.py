@@ -119,6 +119,40 @@ def _format_review(review: dict) -> str:
 - 复盘提醒：{review.get("reminder") or "暂无"}"""
 
 
+def _format_portfolio(portfolio: dict) -> str:
+    if not portfolio:
+        return "暂无组合观察池信息。"
+    if not portfolio.get("ok"):
+        return f"组合观察池更新失败：{portfolio.get('error', '未知错误')}"
+
+    current = portfolio.get("current_item", {})
+    reasons = current.get("watch_reasons", [])
+    top_items = portfolio.get("top_items", [])
+    same_sector = portfolio.get("same_sector_tickers", [])
+
+    reason_text = "\n".join(f"{idx}. {reason}" for idx, reason in enumerate(reasons[:5], start=1))
+    top_text = "\n".join(
+        f"{idx}. {item.get('ticker', 'N/A')} - "
+        f"{item.get('priority_label', 'N/A')} "
+        f"({item.get('priority_score', 'N/A')}/100)，"
+        f"评级 {item.get('rating', 'N/A')}"
+        for idx, item in enumerate(top_items[:5], start=1)
+    )
+    same_sector_text = ", ".join(str(item) for item in same_sector) if same_sector else "暂无"
+
+    return f"""- 观察池规模：**{portfolio.get("watchlist_size", "N/A")}**
+- 当前优先级：**{portfolio.get("priority_label", "N/A")}** ({portfolio.get("priority_score", "N/A")}/100)
+- 组合角色：**{portfolio.get("portfolio_role", "N/A")}**
+- 同板块已有标的：{same_sector_text}
+- 本地观察池：`{portfolio.get("watchlist_path", "N/A")}`
+
+跟踪理由：
+{reason_text or "暂无"}
+
+观察池 Top 5：
+{top_text or "暂无"}"""
+
+
 def _format_research_case(title: str, case: dict, secondary_key: str) -> str:
     if not case:
         return f"### {title}\n\n暂无观点。"
@@ -183,6 +217,7 @@ def _fallback_report(state: ResearchState) -> str:
     horizon = state.get("horizon", "1 month")
     market_data = state.get("market_data", {})
     review = state.get("review", {})
+    portfolio = state.get("portfolio", {})
     technicals = state.get("technicals", {})
     fundamentals = state.get("fundamentals", {})
     risks = state.get("risks", [])
@@ -216,7 +251,11 @@ def _fallback_report(state: ResearchState) -> str:
 
 {_format_review(review)}
 
-## 3. 行情摘要
+## 3. 组合观察池
+
+{_format_portfolio(portfolio)}
+
+## 4. 行情摘要
 
 - 最新收盘价：**{price}**
 - 最新成交量：**{volume}**
@@ -225,7 +264,7 @@ def _fallback_report(state: ResearchState) -> str:
 - 近 1 月涨跌幅：**{returns.get("1m", "N/A")}%**
 - 近 3 月涨跌幅：**{returns.get("3m", "N/A")}%**
 
-## 4. 技术面判断
+## 5. 技术面判断
 
 - 趋势：**{technicals.get("trend_label", "暂无判断")}**
 - MA20：**{technicals.get("ma_20", "N/A")}**
@@ -233,25 +272,25 @@ def _fallback_report(state: ResearchState) -> str:
 - RSI(14)：**{technicals.get("rsi_14", "N/A")}**
 - MACD：**{technicals.get("macd_signal_label", "N/A")}**
 
-## 5. 基本面与估值
+## 6. 基本面与估值
 
 {_format_fundamentals(fundamentals)}
 
-## 6. 多空观点对比
+## 7. 多空观点对比
 
 {_format_research_case("Bull Agent 看多观点", bull_case, "weak_points")}
 
 {_format_research_case("Bear Agent 看空观点", bear_case, "rebuttals")}
 
-## 7. 新闻与催化
+## 8. 新闻与催化
 
 {_format_news(news)}
 
-## 8. 主要风险
+## 9. 主要风险
 
 {risk_text}
 
-## 9. 后续观察指标
+## 10. 后续观察指标
 
 1. 后续财报或已发布财报中的收入增速、利润率和管理层指引。
 2. 股价能否站稳关键均线，以及成交量是否配合。
@@ -267,6 +306,7 @@ def _build_llm_prompt(state: ResearchState, fallback_rating: str, confidence: in
         "market": state.get("market"),
         "horizon": state.get("horizon"),
         "review": state.get("review"),
+        "portfolio": state.get("portfolio"),
         "market_data": state.get("market_data"),
         "technicals": state.get("technicals"),
         "fundamentals": state.get("fundamentals"),
@@ -293,6 +333,7 @@ def _build_llm_prompt(state: ResearchState, fallback_rating: str, confidence: in
 9. 必须包含“基本面与估值”部分，并说明哪些指标缺失。
 10. 如果 earnings_date_context 是 past，不要把 earnings_date 写成“下一次财报”。
 11. 如果 review.has_history 为 true，必须包含“历史复盘”部分；如果为 false，说明本次是首条记录。
+12. 必须包含“组合观察池”部分，说明 portfolio 的优先级、组合角色和跟踪理由。
 
 结构化数据：
 ```json

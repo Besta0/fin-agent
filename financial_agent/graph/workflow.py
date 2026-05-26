@@ -10,6 +10,7 @@ from financial_agent.agents.fundamental_agent import fundamental_node
 from financial_agent.agents.history_agent import history_node
 from financial_agent.agents.market_agent import market_node
 from financial_agent.agents.news_risk_agent import news_risk_node
+from financial_agent.agents.portfolio_agent import portfolio_node
 from financial_agent.agents.report_agent import report_node
 from financial_agent.agents.review_agent import review_node
 from financial_agent.agents.technical_agent import technical_node
@@ -29,6 +30,7 @@ def build_research_graph():
     workflow.add_node("bull", bull_node)
     workflow.add_node("bear", bear_node)
     workflow.add_node("committee", committee_node)
+    workflow.add_node("portfolio", portfolio_node)
     workflow.add_node("report", report_node)
     workflow.add_node("verifier", verifier_node)
     workflow.add_node("history", history_node)
@@ -42,7 +44,8 @@ def build_research_graph():
     workflow.add_edge("news_risk", "bull")
     workflow.add_edge("bull", "bear")
     workflow.add_edge("bear", "committee")
-    workflow.add_edge("committee", "report")
+    workflow.add_edge("committee", "portfolio")
+    workflow.add_edge("portfolio", "report")
     workflow.add_edge("report", "verifier")
     workflow.add_edge("verifier", "history")
     workflow.add_edge("history", END)

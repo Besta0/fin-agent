@@ -15,10 +15,10 @@
 核心吸引力：
 
 - **多 Agent 分工直观**：不是一个黑盒聊天机器人，而是一个投研团队。
-- **流程可解释**：用户能看到 Coordinator、Market、Review、Technical、Fundamental、Risk、Bull、Bear、Committee、Report、Verifier、History 各自做了什么。
+- **流程可解释**：用户能看到 Coordinator、Market、Review、Technical、Fundamental、Risk、Bull、Bear、Committee、Portfolio、Report、Verifier、History 各自做了什么。
 - **数据和推理结合**：行情数据、技术指标和 LLM 总结形成闭环。
 - **适合展示工程能力**：覆盖 LangGraph、工具调用、结构化状态、Chainlit UI 和后续 RAG/MCP 扩展。
-- **可产品化**：未来可以扩展成 watchlist、日报、PDF 报告、财报 RAG 和 Next.js 工作台。
+- **可产品化**：观察池、历史复盘、日报、PDF 报告、财报 RAG 和 Next.js 工作台都可以沿着同一套状态流继续扩展。
 
 ## 3. MVP 目标
 
@@ -167,6 +167,23 @@
 - 根据多空置信度差值输出 偏多 / 中性偏多 / 中性 / 中性偏空 / 偏空
 - Report Agent 会优先使用投委会结论作为最终评级
 
+### Portfolio Agent
+
+职责：
+
+- 维护本地观察池
+- 根据本次分析结果给标的排序
+- 判断当前标的在组合中的角色
+- 提醒同板块标的集中度
+
+当前实现：
+
+- 使用 `outputs/watchlist/watchlist.json` 保存观察池
+- 根据投委会评级、置信度、近 1 日 / 近 1 月涨跌幅、风险数量、新闻数量和历史复盘结果计算 `priority_score`
+- 输出 核心跟踪 / 高优先级 / 常规观察 / 低优先级 / 风险警戒
+- 输出 进攻观察 / 趋势跟踪 / 中性跟踪 / 防守观察 / 风险警戒 等组合角色
+- 在 Chainlit 中展示观察池 Top 5
+
 ### Report Agent
 
 职责：
@@ -206,7 +223,7 @@
 当前实现：
 
 - 每个 ticker 使用一个 JSONL 文件
-- 保存 timestamp、ticker、horizon、price、rating、confidence、verification_status 和 report_path
+- 保存 timestamp、ticker、horizon、price、rating、confidence、portfolio_priority、portfolio_score、portfolio_role、verification_status 和 report_path
 
 ## 5. 当前技术架构
 
@@ -233,6 +250,8 @@ Bear Agent
   ↓
 Committee Agent
   ↓
+Portfolio Agent
+  ↓
 Report Agent
   ↓
 Verifier Agent
@@ -246,12 +265,13 @@ History Agent
 
 二期目标是把 MVP 从“短线分析助手”升级成“更像投研团队”的系统。
 
-下一批新增 Agent：
+下一批新增 Agent / 能力：
 
-- **Watchlist Agent**：支持批量跟踪多个股票
+- **Watchlist Dashboard**：支持在前端查看多个股票的优先级和最近复盘状态
 
 新增能力：
 
+- 观察池排序变化和优先级提醒
 - SEC filings 检索
 - 财报电话会 transcript 检索
 - 公司基本面数据

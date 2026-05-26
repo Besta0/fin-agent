@@ -16,6 +16,7 @@ AGENT_TITLES = {
     "bull": "Bull Agent",
     "bear": "Bear Agent",
     "committee": "Committee Agent",
+    "portfolio": "Portfolio Agent",
     "report": "Report Agent",
     "verifier": "Verifier Agent",
     "history": "History Agent",
@@ -103,6 +104,39 @@ def _format_review(review: dict) -> str:
     )
 
 
+def _format_portfolio(portfolio: dict) -> str:
+    if not portfolio:
+        return "暂无观察池信息。"
+    if not portfolio.get("ok"):
+        return f"观察池更新失败：{portfolio.get('error', '未知错误')}"
+
+    current = portfolio.get("current_item", {})
+    reasons = current.get("watch_reasons", [])
+    top_items = portfolio.get("top_items", [])
+    same_sector = portfolio.get("same_sector_tickers", [])
+
+    reason_text = "\n".join(f"{idx}. {reason}" for idx, reason in enumerate(reasons[:5], start=1))
+    top_text = "\n".join(
+        f"{idx}. **{item.get('ticker', 'N/A')}** "
+        f"{item.get('priority_label', 'N/A')} "
+        f"({item.get('priority_score', 'N/A')}/100) - "
+        f"{item.get('rating', 'N/A')}"
+        for idx, item in enumerate(top_items[:5], start=1)
+    )
+    sector_text = ", ".join(str(item) for item in same_sector) if same_sector else "暂无"
+
+    return (
+        f"- 观察池规模：**{portfolio.get('watchlist_size', 'N/A')}**\n"
+        f"- 当前优先级：**{portfolio.get('priority_label', 'N/A')}** "
+        f"({portfolio.get('priority_score', 'N/A')}/100)\n"
+        f"- 组合角色：**{portfolio.get('portfolio_role', 'N/A')}**\n"
+        f"- 同板块已有标的：{sector_text}\n"
+        f"- 本地文件：`{portfolio.get('watchlist_path', 'N/A')}`\n\n"
+        f"跟踪理由：\n{reason_text or '暂无'}\n\n"
+        f"观察池 Top 5：\n{top_text or '暂无'}"
+    )
+
+
 def _brief_update(node_name: str, update: dict) -> str:
     if node_name == "coordinator":
         ticker = update.get("ticker") or "未识别"
@@ -164,6 +198,9 @@ def _brief_update(node_name: str, update: dict) -> str:
             f"关键依据：\n{reason_text or '暂无'}\n\n"
             f"不确定性：{view.get('uncertainty', '暂无')}"
         )
+
+    if node_name == "portfolio":
+        return "### 组合观察池\n" + _format_portfolio(update.get("portfolio", {}))
 
     if node_name == "report":
         return "中文投研报告已生成。"

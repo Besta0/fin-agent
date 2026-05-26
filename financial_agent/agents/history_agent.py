@@ -8,6 +8,7 @@ async def history_node(state: ResearchState) -> ResearchState:
     ticker = state.get("ticker") or "unknown"
     committee_view = state.get("committee_view", {})
     market_data = state.get("market_data", {})
+    portfolio = state.get("portfolio", {})
     verification = state.get("verification", {})
 
     record = {
@@ -17,6 +18,9 @@ async def history_node(state: ResearchState) -> ResearchState:
         "price": market_data.get("last_close"),
         "rating": committee_view.get("rating"),
         "confidence": committee_view.get("confidence"),
+        "portfolio_priority": portfolio.get("priority_label"),
+        "portfolio_score": portfolio.get("priority_score"),
+        "portfolio_role": portfolio.get("portfolio_role"),
         "verification_status": verification.get("status"),
         "report_path": verification.get("report_path"),
     }

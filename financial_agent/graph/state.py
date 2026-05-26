@@ -20,6 +20,7 @@ class ResearchState(TypedDict, total=False):
     bull_case: dict[str, Any]
     bear_case: dict[str, Any]
     committee_view: dict[str, Any]
+    portfolio: dict[str, Any]
     verification: dict[str, Any]
     history_record: dict[str, Any]
     agent_notes: list[dict[str, str]]

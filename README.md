@@ -1,6 +1,6 @@
 # Fin Agent
 
-一个基于 **Chainlit + LangGraph** 的中文多 Agent 投研助手。用户输入一句股票分析问题，系统会模拟一个小型投研团队，自动识别 ticker、拉取行情和基本面数据、计算技术指标、整理新闻线索、形成多空观点、给出投委会结论，并生成带质量检查的中文投研报告。
+一个基于 **Chainlit + LangGraph** 的中文多 Agent 投研助手。用户输入一句股票分析问题，系统会模拟一个小型投研团队，自动识别 ticker、拉取行情和基本面数据、计算技术指标、整理新闻线索、形成多空观点、给出投委会结论，并生成带质量检查和观察池跟踪的中文投研报告。
 
 > 免责声明：本项目仅用于学习、研究和 Agent 架构演示，不构成任何投资建议。
 
@@ -13,7 +13,7 @@
 - 写作层负责生成中文报告
 - 质检层负责检查报告是否和结构化数据矛盾
 
-它的核心不是“让 AI 猜涨跌”，而是把投研流程做成一个可追踪、可扩展、可展示的系统。
+它的核心不是“让 AI 猜涨跌”，而是把投研流程做成一个可追踪、可复盘、可扩展、可展示的系统。随着 Review、Portfolio、History 这些 Agent 接入，系统会逐渐从“一次性报告生成器”进化成“持续跟踪的研究工作台”。
 
 ## 技术栈
 
@@ -52,6 +52,8 @@ Bull Agent
 Bear Agent
   ↓
 Committee Agent
+  ↓
+Portfolio Agent
   ↓
 Report Agent
   ↓
@@ -250,6 +252,26 @@ bear_case
 committee_view
 ```
 
+### Portfolio Agent
+
+文件：`financial_agent/agents/portfolio_agent.py`
+
+工具：`financial_agent/tools/watchlist.py`
+
+职责：
+
+- 维护本地观察池 `outputs/watchlist/watchlist.json`
+- 根据投委会评级、置信度、近期涨跌幅、风险数量、新闻数量和历史复盘结果计算跟踪优先级
+- 给当前标的打上组合角色，例如进攻观察、趋势跟踪、中性跟踪、防守观察、风险警戒
+- 检查观察池里是否已有同板块标的，提示赛道集中度
+- 输出观察池 Top 5，帮助用户知道下一步优先复盘哪些股票
+
+输出字段：
+
+```python
+portfolio
+```
+
 ### Report Agent
 
 文件：`financial_agent/agents/report_agent.py`
@@ -266,6 +288,8 @@ committee_view
 
 - 投资结论
 - 投委会综合判断
+- 历史复盘
+- 组合观察池
 - 行情摘要
 - 技术面判断
 - 基本面与估值
@@ -321,6 +345,9 @@ horizon
 price
 rating
 confidence
+portfolio_priority
+portfolio_score
+portfolio_role
 verification_status
 report_path
 ```
@@ -347,6 +374,7 @@ class ResearchState(TypedDict, total=False):
     bull_case: dict[str, Any]
     bear_case: dict[str, Any]
     committee_view: dict[str, Any]
+    portfolio: dict[str, Any]
     verification: dict[str, Any]
     history_record: dict[str, Any]
     agent_notes: list[dict[str, str]]
@@ -377,6 +405,8 @@ Bear: bearish arguments
   ↓
 Committee: final rating
   ↓
+Portfolio: watchlist priority / portfolio role
+  ↓
 Report: markdown report
   ↓
 Verifier: quality check
@@ -398,6 +428,7 @@ History: append JSONL record
 │   │   ├── fundamental_agent.py
 │   │   ├── market_agent.py
 │   │   ├── news_risk_agent.py
+│   │   ├── portfolio_agent.py
 │   │   ├── report_agent.py
 │   │   ├── review_agent.py
 │   │   ├── technical_agent.py
@@ -412,12 +443,15 @@ History: append JSONL record
 │   │   ├── history.py
 │   │   ├── indicators.py
 │   │   ├── market_data.py
-│   │   └── news.py
+│   │   ├── news.py
+│   │   └── watchlist.py
 │   ├── cli.py
 │   ├── llm.py
 │   └── settings.py
 ├── outputs
-│   └── reports
+│   ├── history
+│   ├── reports
+│   └── watchlist
 ├── PROJECT_PLAN.md
 ├── requirements.txt
 └── .env.example
@@ -506,6 +540,7 @@ python -m financial_agent.cli "帮我分析一下 NVDA 未来一个月走势"
 - 新闻线索和来源链接展示
 - 多空观点生成
 - 投委会评级
+- 本地观察池和组合优先级
 - 中文报告生成
 - 报告质量检查
 - 历史报告复盘
@@ -518,12 +553,12 @@ python -m financial_agent.cli "帮我分析一下 NVDA 未来一个月走势"
 - 基本面数据可能出现 partial fallback
 - 新闻质量取决于 yfinance 返回结果，可能包含相关但不完全聚焦的文章
 - Verifier 当前是规则质检，不会自动重写报告
-- 历史记录当前使用本地 JSONL，不支持多用户隔离
+- 历史记录和观察池当前使用本地文件，不支持多用户隔离
 - 当前主要面向美股，A 股和港股 ticker 支持有限
 
 ## 后续路线
 
-- Watchlist：支持多股票跟踪
+- Watchlist Dashboard：展示观察池、优先级变化和最近复盘结果
 - RAG：接入 10-K / 10-Q / earnings call transcript
 - MCP：统一封装行情、新闻、财报、RAG 和报告导出工具
 - PDF 导出
