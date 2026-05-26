@@ -5,6 +5,11 @@ import sys
 
 from financial_agent.graph.workflow import build_research_graph
 from financial_agent.help import HELP_MESSAGE, is_help_intent
+from financial_agent.tools.watchlist import (
+    format_watchlist_response,
+    is_watchlist_intent,
+    watchlist_limit_from_query,
+)
 
 
 async def main() -> int:
@@ -15,6 +20,10 @@ async def main() -> int:
 
     if is_help_intent(query):
         print(HELP_MESSAGE)
+        return 0
+
+    if is_watchlist_intent(query):
+        print(format_watchlist_response(limit=watchlist_limit_from_query(query)))
         return 0
 
     graph = build_research_graph()

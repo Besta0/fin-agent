@@ -5,6 +5,11 @@ import chainlit as cl
 from financial_agent.graph.workflow import build_research_graph
 from financial_agent.help import HELP_MESSAGE, is_help_intent
 from financial_agent.tools.charting import build_price_chart
+from financial_agent.tools.watchlist import (
+    format_watchlist_response,
+    is_watchlist_intent,
+    watchlist_limit_from_query,
+)
 
 
 AGENT_TITLES = {
@@ -254,6 +259,11 @@ async def on_message(message: cl.Message) -> None:
 
     if is_help_intent(user_query):
         await cl.Message(content=HELP_MESSAGE).send()
+        return
+
+    if is_watchlist_intent(user_query):
+        limit = watchlist_limit_from_query(user_query)
+        await cl.Message(content=format_watchlist_response(limit=limit)).send()
         return
 
     graph = build_research_graph()
