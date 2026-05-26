@@ -6,7 +6,9 @@ from financial_agent.graph.workflow import build_research_graph
 from financial_agent.help import HELP_MESSAGE, is_help_intent
 from financial_agent.tools.charting import build_price_chart
 from financial_agent.tools.watchlist import (
+    format_watchlist_detail_response,
     format_watchlist_response,
+    is_watchlist_detail_intent,
     is_watchlist_intent,
     watchlist_limit_from_query,
 )
@@ -259,6 +261,10 @@ async def on_message(message: cl.Message) -> None:
 
     if is_help_intent(user_query):
         await cl.Message(content=HELP_MESSAGE).send()
+        return
+
+    if is_watchlist_detail_intent(user_query):
+        await cl.Message(content=format_watchlist_detail_response(user_query)).send()
         return
 
     if is_watchlist_intent(user_query):

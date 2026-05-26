@@ -36,6 +36,7 @@ Chainlit UI
 Intent Router
   ├─ Help Intent → Capability Guide
   ├─ Watchlist Intent → Watchlist Table
+  ├─ Watchlist Detail Intent → Watchlist Item Detail
   ↓
 LangGraph Workflow
   ↓
@@ -537,6 +538,7 @@ http://localhost:8000
 ```bash
 python -m financial_agent.cli "帮我分析一下 NVDA 未来一个月走势"
 python -m financial_agent.cli "查看观察池"
+python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 ```
 
 示例问题：
@@ -545,6 +547,7 @@ python -m financial_agent.cli "查看观察池"
 你能做什么
 查看观察池
 观察池里优先级最高的是谁
+为什么 NVDA 是核心跟踪
 帮我分析一下英伟达未来一个月走势
 帮我分析一下闪迪今天走势
 帮我看看博通未来一个月是偏多还是偏空
@@ -555,6 +558,7 @@ python -m financial_agent.cli "查看观察池"
 - 中文自然语言输入
 - Help Intent：用户问“你能做什么 / 怎么用 / 帮助”时直接返回功能说明
 - Watchlist Intent：用户问“查看观察池 / 我的 watchlist / 优先级最高”时直接返回观察池表格
+- Watchlist Detail Intent：用户问“为什么某个 ticker 是核心跟踪 / 观察池详情”时返回该标的跟踪理由
 - 早停路由：无法识别 ticker 或问题不是股票投研时，不启动后续分析 Agent
 - 规则 + LLM fallback ticker 识别
 - 美股行情拉取

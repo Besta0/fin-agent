@@ -236,6 +236,7 @@ Chainlit UI
 Intent Router
   ├─ Help Intent → 能力说明和示例问题
   ├─ Watchlist Intent → 观察池表格
+  ├─ Watchlist Detail Intent → 单个标的跟踪理由
   ↓
 LangGraph Workflow
   ↓
