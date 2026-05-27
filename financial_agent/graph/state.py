@@ -4,6 +4,7 @@ from typing import Any, TypedDict
 
 
 class ResearchState(TypedDict, total=False):
+    user_id: str
     user_query: str
     intent: str
     should_continue: bool
@@ -15,6 +16,7 @@ class ResearchState(TypedDict, total=False):
     ticker_resolution: dict[str, Any]
     analysis_modules: list[str]
     market_data: dict[str, Any]
+    memory_context: dict[str, Any]
     review: dict[str, Any]
     technicals: dict[str, Any]
     fundamentals: dict[str, Any]

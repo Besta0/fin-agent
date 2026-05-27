@@ -43,6 +43,8 @@ LangGraph Workflow
 Coordinator Agent
   ├─ Missing ticker / non-research → Direct Response
   ↓
+Memory Agent
+  ↓
 Market Agent
   ↓
 Review Agent
@@ -343,8 +345,9 @@ pass / warning / fail
 职责：
 
 - 在 Verifier Agent 之后保存本次分析记录
-- 使用本地 JSONL 文件作为轻量历史库
-- 每个 ticker 一个文件：`outputs/history/{ticker}.jsonl`
+- 使用按用户隔离的本地 JSONL 文件作为轻量历史库
+- 每个用户、每个 ticker 一个文件：`outputs/users/{user_id}/history/{ticker}.jsonl`
+- 同步写入语义记忆：`outputs/users/{user_id}/memory/semantic_memory.jsonl`
 
 保存字段：
 
@@ -361,6 +364,26 @@ portfolio_score
 portfolio_role
 verification_status
 report_path
+```
+
+### Memory Agent
+
+文件：`financial_agent/agents/memory_agent.py`
+
+工具：`financial_agent/tools/memory.py`
+
+职责：
+
+- 读取当前用户偏好，例如市场、行业、周期、风险和输出风格
+- 从用户输入中更新偏好记忆，例如“记住我偏好短线，只看科技股”
+- 检索同一用户的语义记忆，找到相关历史报告摘要
+- 把用户偏好和相关历史记忆提供给 Report Agent
+
+本地存储：
+
+```text
+outputs/users/{user_id}/memory/preferences.json
+outputs/users/{user_id}/memory/semantic_memory.jsonl
 ```
 
 ## 状态对象
@@ -405,6 +428,8 @@ Coordinator: ticker / horizon
   ├─ Missing ticker: ask user for ticker and stop
   ├─ Non-research: explain scope and stop
   ↓
+Memory: user preferences / semantic memories
+  ↓
 Market: price series / returns
   ↓
 Review: previous rating / price performance
@@ -443,6 +468,7 @@ History: append JSONL record
 │   │   ├── coordinator.py
 │   │   ├── fundamental_agent.py
 │   │   ├── market_agent.py
+│   │   ├── memory_agent.py
 │   │   ├── news_risk_agent.py
 │   │   ├── portfolio_agent.py
 │   │   ├── report_agent.py
@@ -459,6 +485,7 @@ History: append JSONL record
 │   │   ├── history.py
 │   │   ├── indicators.py
 │   │   ├── market_data.py
+│   │   ├── memory.py
 │   │   ├── news.py
 │   │   └── watchlist.py
 │   ├── cli.py
@@ -468,6 +495,7 @@ History: append JSONL record
 ├── outputs
 │   ├── history
 │   ├── reports
+│   ├── users
 │   └── watchlist
 ├── PROJECT_PLAN.md
 ├── requirements.txt
@@ -537,6 +565,8 @@ http://localhost:8000
 
 ```bash
 python -m financial_agent.cli "帮我分析一下 NVDA 未来一个月走势"
+python -m financial_agent.cli "记住我偏好短线，只看科技股"
+python -m financial_agent.cli "以前分析过 NVDA 吗"
 python -m financial_agent.cli "查看观察池"
 python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 ```
@@ -545,6 +575,8 @@ python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 
 ```text
 你能做什么
+记住我偏好短线，只看科技股
+以前分析过 NVDA 吗
 查看观察池
 观察池里优先级最高的是谁
 为什么 NVDA 是核心跟踪
@@ -560,6 +592,9 @@ python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 - Watchlist Intent：用户问“查看观察池 / 我的 watchlist / 优先级最高”时直接返回观察池表格
 - Watchlist Detail Intent：用户问“为什么某个 ticker 是核心跟踪 / 观察池详情”时返回该标的跟踪理由
 - 早停路由：无法识别 ticker 或问题不是股票投研时，不启动后续分析 Agent
+- 用户偏好记忆：保存市场、行业、周期、风险和输出风格偏好
+- RAG 语义记忆：按用户检索历史报告摘要，为新报告提供上下文
+- 多用户隔离记忆：history、watchlist、reports、preferences、semantic memory 按 user_id 分目录保存
 - 规则 + LLM fallback ticker 识别
 - 美股行情拉取
 - 技术指标计算
@@ -580,7 +615,7 @@ python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 - 基本面数据可能出现 partial fallback
 - 新闻质量取决于 yfinance 返回结果，可能包含相关但不完全聚焦的文章
 - Verifier 当前是规则质检，不会自动重写报告
-- 历史记录和观察池当前使用本地文件，不支持多用户隔离
+- 当前语义记忆使用本地轻量检索，不是向量数据库；后续可替换为 Chroma / FAISS / Qdrant
 - 当前主要面向美股，A 股和港股 ticker 支持有限
 
 ## 后续路线

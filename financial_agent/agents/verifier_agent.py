@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from financial_agent.graph.state import ResearchState
+from financial_agent.tools.memory import user_reports_dir
 
 
 PROHIBITED_ADVICE = [
@@ -21,7 +21,6 @@ PROHIBITED_ADVICE = [
 
 
 RATING_ORDER = ["偏多", "中性偏多", "中性", "中性偏空", "偏空"]
-REPORT_DIR = Path("outputs/reports")
 
 
 def _issue(severity: str, category: str, message: str) -> dict[str, str]:
@@ -224,10 +223,11 @@ def _build_suggestions(issues: list[dict[str, str]]) -> list[str]:
     return suggestions
 
 
-def _save_verified_report(ticker: str, report: str) -> str:
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+def _save_verified_report(ticker: str, report: str, user_id: str | None = None) -> str:
+    report_dir = user_reports_dir(user_id)
+    report_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    report_path = REPORT_DIR / f"{ticker}_verified_{timestamp}.md"
+    report_path = report_dir / f"{ticker}_verified_{timestamp}.md"
     report_path.write_text(report, encoding="utf-8")
     return str(report_path)
 
@@ -255,7 +255,7 @@ async def verifier_node(state: ResearchState) -> ResearchState:
     verification_section = _format_verification(verification)
     final_report = f"{report.rstrip()}\n\n{verification_section}" if report else verification_section
     ticker = state.get("ticker") or "unknown"
-    verified_path = _save_verified_report(ticker, final_report)
+    verified_path = _save_verified_report(ticker, final_report, user_id=state.get("user_id"))
     verification["report_path"] = verified_path
 
     return {

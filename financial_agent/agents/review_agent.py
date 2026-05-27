@@ -29,9 +29,10 @@ def _performance_label(previous_rating: str, return_percent: float | None) -> st
 
 
 async def review_node(state: ResearchState) -> ResearchState:
+    user_id = state.get("user_id")
     ticker = state.get("ticker", "")
     current_price = state.get("market_data", {}).get("last_close")
-    previous = load_latest_history(ticker) if ticker else None
+    previous = load_latest_history(ticker, user_id=user_id) if ticker else None
 
     if not previous:
         review = {

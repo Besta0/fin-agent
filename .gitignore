@@ -9,3 +9,4 @@ outputs/reports/*.md
 outputs/reports/*.pdf
 outputs/history/*.jsonl
 outputs/watchlist/*.json
+outputs/users/

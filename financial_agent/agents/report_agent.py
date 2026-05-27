@@ -2,13 +2,10 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from pathlib import Path
 
 from financial_agent.graph.state import ResearchState
 from financial_agent.llm import generate_text
-
-
-REPORT_DIR = Path("outputs/reports")
+from financial_agent.tools.memory import user_reports_dir
 
 
 def _rating_from_state(state: ResearchState) -> tuple[str, int]:
@@ -119,6 +116,27 @@ def _format_review(review: dict) -> str:
 - 复盘提醒：{review.get("reminder") or "暂无"}"""
 
 
+def _format_memory_context(memory_context: dict) -> str:
+    if not memory_context:
+        return "暂无用户记忆。"
+
+    preferences = memory_context.get("preferences") or {}
+    updates = memory_context.get("preference_updates") or []
+    memories = memory_context.get("relevant_memories") or []
+    memory_text = "\n".join(
+        f"{idx}. {item.get('ticker', 'N/A')}：{item.get('summary', '暂无摘要')}"
+        for idx, item in enumerate(memories[:3], start=1)
+    )
+    return f"""- 用户：`{memory_context.get("user_id") or "default"}`
+- 市场偏好：**{", ".join(preferences.get("markets") or []) or "暂无"}**
+- 行业偏好：**{", ".join(preferences.get("sectors") or []) or "暂无"}**
+- 周期 / 风险 / 输出偏好：**{preferences.get("horizon") or "暂无"} / {preferences.get("risk_profile") or "暂无"} / {preferences.get("output_style") or "暂无"}**
+- 本次新增偏好：{", ".join(updates) or "暂无"}
+
+相关语义记忆：
+{memory_text or "暂无相关历史记忆。"}"""
+
+
 def _format_portfolio(portfolio: dict) -> str:
     if not portfolio:
         return "暂无组合观察池信息。"
@@ -216,6 +234,7 @@ def _fallback_report(state: ResearchState) -> str:
     company_name = state.get("company_name") or ticker
     horizon = state.get("horizon", "1 month")
     market_data = state.get("market_data", {})
+    memory_context = state.get("memory_context", {})
     review = state.get("review", {})
     portfolio = state.get("portfolio", {})
     technicals = state.get("technicals", {})
@@ -247,15 +266,19 @@ def _fallback_report(state: ResearchState) -> str:
 
 {_format_committee_view(committee_view)}
 
-## 2. 历史复盘
+## 2. 用户记忆
+
+{_format_memory_context(memory_context)}
+
+## 3. 历史复盘
 
 {_format_review(review)}
 
-## 3. 组合观察池
+## 4. 组合观察池
 
 {_format_portfolio(portfolio)}
 
-## 4. 行情摘要
+## 5. 行情摘要
 
 - 最新收盘价：**{price}**
 - 最新成交量：**{volume}**
@@ -264,7 +287,7 @@ def _fallback_report(state: ResearchState) -> str:
 - 近 1 月涨跌幅：**{returns.get("1m", "N/A")}%**
 - 近 3 月涨跌幅：**{returns.get("3m", "N/A")}%**
 
-## 5. 技术面判断
+## 6. 技术面判断
 
 - 趋势：**{technicals.get("trend_label", "暂无判断")}**
 - MA20：**{technicals.get("ma_20", "N/A")}**
@@ -272,25 +295,25 @@ def _fallback_report(state: ResearchState) -> str:
 - RSI(14)：**{technicals.get("rsi_14", "N/A")}**
 - MACD：**{technicals.get("macd_signal_label", "N/A")}**
 
-## 6. 基本面与估值
+## 7. 基本面与估值
 
 {_format_fundamentals(fundamentals)}
 
-## 7. 多空观点对比
+## 8. 多空观点对比
 
 {_format_research_case("Bull Agent 看多观点", bull_case, "weak_points")}
 
 {_format_research_case("Bear Agent 看空观点", bear_case, "rebuttals")}
 
-## 8. 新闻与催化
+## 9. 新闻与催化
 
 {_format_news(news)}
 
-## 9. 主要风险
+## 10. 主要风险
 
 {risk_text}
 
-## 10. 后续观察指标
+## 11. 后续观察指标
 
 1. 后续财报或已发布财报中的收入增速、利润率和管理层指引。
 2. 股价能否站稳关键均线，以及成交量是否配合。
@@ -305,6 +328,7 @@ def _build_llm_prompt(state: ResearchState, fallback_rating: str, confidence: in
         "company_name": state.get("company_name"),
         "market": state.get("market"),
         "horizon": state.get("horizon"),
+        "memory_context": state.get("memory_context"),
         "review": state.get("review"),
         "portfolio": state.get("portfolio"),
         "market_data": state.get("market_data"),
@@ -334,6 +358,8 @@ def _build_llm_prompt(state: ResearchState, fallback_rating: str, confidence: in
 10. 如果 earnings_date_context 是 past，不要把 earnings_date 写成“下一次财报”。
 11. 如果 review.has_history 为 true，必须包含“历史复盘”部分；如果为 false，说明本次是首条记录。
 12. 必须包含“组合观察池”部分，说明 portfolio 的优先级、组合角色和跟踪理由。
+13. 如果 memory_context.preferences 有用户偏好，报告应尊重偏好的周期、市场、行业和输出风格。
+14. 如果 memory_context.relevant_memories 有相关历史记忆，应在复盘或后续观察中引用其摘要，不要编造记忆外内容。
 
 结构化数据：
 ```json
@@ -349,10 +375,11 @@ async def report_node(state: ResearchState) -> ResearchState:
     final_report = await generate_text(prompt, fallback=fallback)
     final_report = _append_source_links(final_report, state.get("news", []))
 
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    report_dir = user_reports_dir(state.get("user_id"))
+    report_dir.mkdir(parents=True, exist_ok=True)
     ticker = state.get("ticker") or "unknown"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    report_path = REPORT_DIR / f"{ticker}_{timestamp}.md"
+    report_path = report_dir / f"{ticker}_{timestamp}.md"
     report_path.write_text(final_report, encoding="utf-8")
 
     return {

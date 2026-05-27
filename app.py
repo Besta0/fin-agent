@@ -5,6 +5,14 @@ import chainlit as cl
 from financial_agent.graph.workflow import build_research_graph
 from financial_agent.help import HELP_MESSAGE, is_help_intent
 from financial_agent.tools.charting import build_price_chart
+from financial_agent.tools.memory import (
+    format_preferences_response,
+    format_semantic_memory_response,
+    is_preference_intent,
+    is_semantic_memory_intent,
+    safe_user_id,
+    update_preferences_from_query,
+)
 from financial_agent.tools.watchlist import (
     format_watchlist_detail_response,
     format_watchlist_response,
@@ -16,6 +24,7 @@ from financial_agent.tools.watchlist import (
 
 AGENT_TITLES = {
     "coordinator": "Coordinator Agent",
+    "memory": "Memory Agent",
     "market": "Market Agent",
     "review": "Review Agent",
     "technical": "Technical Agent",
@@ -29,6 +38,17 @@ AGENT_TITLES = {
     "verifier": "Verifier Agent",
     "history": "History Agent",
 }
+
+
+def _current_user_id() -> str:
+    user = cl.user_session.get("user")
+    identifier = getattr(user, "identifier", None) or getattr(user, "id", None)
+    if identifier:
+        return safe_user_id(str(identifier))
+    session_id = cl.user_session.get("id")
+    if session_id:
+        return safe_user_id(str(session_id))
+    return "chainlit"
 
 
 def _format_news_clues(news: list[dict], limit: int = 6) -> str:
@@ -167,6 +187,16 @@ def _brief_update(node_name: str, update: dict) -> str:
         change = market_data.get("returns", {}).get("1d")
         return f"已获取行情数据。最新收盘价：**{price}**；近 1 日涨跌幅：**{change}%**。"
 
+    if node_name == "memory":
+        memory_context = update.get("memory_context", {})
+        updates = memory_context.get("preference_updates", [])
+        memories = memory_context.get("relevant_memories", [])
+        update_text = "；".join(updates) if updates else "无新增偏好"
+        return (
+            f"已加载用户记忆。偏好更新：**{update_text}**；"
+            f"相关历史记忆：**{len(memories)}** 条。"
+        )
+
     if node_name == "review":
         return "### 历史复盘\n" + _format_review(update.get("review", {}))
 
@@ -255,6 +285,7 @@ async def on_chat_start() -> None:
 @cl.on_message
 async def on_message(message: cl.Message) -> None:
     user_query = message.content.strip()
+    user_id = _current_user_id()
     if not user_query:
         await cl.Message(content="请输入一个股票分析问题，比如：`分析一下 AAPL 最近走势`。").send()
         return
@@ -263,13 +294,24 @@ async def on_message(message: cl.Message) -> None:
         await cl.Message(content=HELP_MESSAGE).send()
         return
 
-    if is_watchlist_detail_intent(user_query):
-        await cl.Message(content=format_watchlist_detail_response(user_query)).send()
+    if is_preference_intent(user_query) and not any(
+        keyword in user_query for keyword in ("分析", "走势", "看看", "研究", "评级")
+    ):
+        update_preferences_from_query(user_id, user_query)
+        await cl.Message(content=format_preferences_response(user_id)).send()
+        return
+
+    if is_semantic_memory_intent(user_query):
+        await cl.Message(content=format_semantic_memory_response(user_id, user_query)).send()
+        return
+
+    if is_watchlist_detail_intent(user_query, user_id=user_id):
+        await cl.Message(content=format_watchlist_detail_response(user_query, user_id=user_id)).send()
         return
 
     if is_watchlist_intent(user_query):
         limit = watchlist_limit_from_query(user_query)
-        await cl.Message(content=format_watchlist_response(limit=limit)).send()
+        await cl.Message(content=format_watchlist_response(limit=limit, user_id=user_id)).send()
         return
 
     graph = build_research_graph()
@@ -280,6 +322,7 @@ async def on_message(message: cl.Message) -> None:
     try:
         async for event in graph.astream(
             {
+                "user_id": user_id,
                 "user_query": user_query,
                 "agent_notes": [],
                 "errors": [],

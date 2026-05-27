@@ -9,6 +9,7 @@ from financial_agent.agents.coordinator import coordinator_node
 from financial_agent.agents.fundamental_agent import fundamental_node
 from financial_agent.agents.history_agent import history_node
 from financial_agent.agents.market_agent import market_node
+from financial_agent.agents.memory_agent import memory_node
 from financial_agent.agents.news_risk_agent import news_risk_node
 from financial_agent.agents.portfolio_agent import portfolio_node
 from financial_agent.agents.report_agent import report_node
@@ -28,6 +29,7 @@ def build_research_graph():
     workflow = StateGraph(ResearchState)
 
     workflow.add_node("coordinator", coordinator_node)
+    workflow.add_node("memory", memory_node)
     workflow.add_node("market", market_node)
     workflow.add_node("review", review_node)
     workflow.add_node("technical", technical_node)
@@ -46,10 +48,11 @@ def build_research_graph():
         "coordinator",
         _route_after_coordinator,
         {
-            "continue": "market",
+            "continue": "memory",
             "stop": END,
         },
     )
+    workflow.add_edge("memory", "market")
     workflow.add_edge("market", "review")
     workflow.add_edge("review", "technical")
     workflow.add_edge("technical", "fundamental")

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from financial_agent.graph.state import ResearchState
 from financial_agent.tools.history import append_history
+from financial_agent.tools.memory import append_semantic_memory
 
 
 async def history_node(state: ResearchState) -> ResearchState:
+    user_id = state.get("user_id")
     ticker = state.get("ticker") or "unknown"
     committee_view = state.get("committee_view", {})
     market_data = state.get("market_data", {})
@@ -24,15 +26,33 @@ async def history_node(state: ResearchState) -> ResearchState:
         "verification_status": verification.get("status"),
         "report_path": verification.get("report_path"),
     }
-    history_path = append_history(record)
+    history_path = append_history(record, user_id=user_id)
+    semantic_path = append_semantic_memory(
+        user_id,
+        {
+            "ticker": ticker,
+            "company_name": record.get("company_name"),
+            "title": f"{record.get('company_name') or ticker} 投研报告",
+            "rating": record.get("rating"),
+            "confidence": record.get("confidence"),
+            "report_path": record.get("report_path"),
+            "summary": (
+                f"{ticker} 本次评级为 {record.get('rating')}，"
+                f"置信度 {record.get('confidence')}%，"
+                f"观察池角色 {record.get('portfolio_role') or 'N/A'}，"
+                f"优先级 {record.get('portfolio_priority') or 'N/A'}。"
+            ),
+            "text": state.get("final_report", "")[:4000],
+        },
+    )
 
     return {
-        "history_record": {**record, "history_path": history_path},
+        "history_record": {**record, "history_path": history_path, "semantic_memory_path": semantic_path},
         "agent_notes": [
             *state.get("agent_notes", []),
             {
                 "agent": "History Agent",
-                "summary": f"Saved history record for {ticker} to {history_path}.",
+                "summary": f"Saved history and semantic memory for {ticker}.",
             },
         ],
     }

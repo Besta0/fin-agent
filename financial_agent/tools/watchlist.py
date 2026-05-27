@@ -6,9 +6,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from financial_agent.tools.memory import DEFAULT_USER_ID, LEGACY_WATCHLIST_PATH, user_watchlist_path
 
-WATCHLIST_DIR = Path("outputs/watchlist")
-WATCHLIST_PATH = WATCHLIST_DIR / "watchlist.json"
+WATCHLIST_PATH = LEGACY_WATCHLIST_PATH
 MAX_WATCHLIST_ITEMS = 50
 WATCHLIST_KEYWORDS = [
     "查看观察池",
@@ -50,6 +50,17 @@ def _empty_watchlist() -> dict[str, Any]:
     return {"updated_at": None, "items": []}
 
 
+def _path_for_user(user_id: str | None = None) -> Path:
+    return user_watchlist_path(user_id)
+
+
+def _display_path_for_user(user_id: str | None = None) -> Path:
+    path = _path_for_user(user_id)
+    if not path.exists() and (user_id is None or user_id == DEFAULT_USER_ID) and LEGACY_WATCHLIST_PATH.exists():
+        return LEGACY_WATCHLIST_PATH
+    return path
+
+
 def _display(value: Any, suffix: str = "") -> str:
     if value is None or value == "":
         return "N/A"
@@ -68,12 +79,16 @@ def _format_reasons(reasons: list[Any]) -> str:
     return "\n".join(f"{idx}. {reason}" for idx, reason in enumerate(reasons[:8], start=1))
 
 
-def load_watchlist() -> dict[str, Any]:
-    if not WATCHLIST_PATH.exists():
+def load_watchlist(user_id: str | None = None) -> dict[str, Any]:
+    path = _path_for_user(user_id)
+    if not path.exists() and (user_id is None or user_id == DEFAULT_USER_ID):
+        path = LEGACY_WATCHLIST_PATH
+
+    if not path.exists():
         return _empty_watchlist()
 
     try:
-        data = json.loads(WATCHLIST_PATH.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return _empty_watchlist()
 
@@ -86,21 +101,21 @@ def load_watchlist() -> dict[str, Any]:
     return data
 
 
-def get_watchlist_item(ticker: str) -> dict[str, Any] | None:
+def get_watchlist_item(ticker: str, user_id: str | None = None) -> dict[str, Any] | None:
     safe_ticker = _safe_ticker(ticker)
-    for item in load_watchlist().get("items", []):
+    for item in load_watchlist(user_id).get("items", []):
         if _safe_ticker(str(item.get("ticker") or "")) == safe_ticker:
             return item
     return None
 
 
-def find_watchlist_item_from_query(text: str) -> dict[str, Any] | None:
+def find_watchlist_item_from_query(text: str, user_id: str | None = None) -> dict[str, Any] | None:
     normalized = text.strip().lower()
     if not normalized:
         return None
 
     safe_query = _safe_ticker(text)
-    for item in load_watchlist().get("items", []):
+    for item in load_watchlist(user_id).get("items", []):
         ticker = str(item.get("ticker") or "")
         company_name = str(item.get("company_name") or "")
         safe_ticker = _safe_ticker(ticker)
@@ -111,14 +126,15 @@ def find_watchlist_item_from_query(text: str) -> dict[str, Any] | None:
 
     match = re.search(r"(?<![A-Za-z0-9.])([A-Za-z]{1,5}(?:\.[A-Za-z])?)(?![A-Za-z0-9.])", text)
     if match:
-        return get_watchlist_item(match.group(1))
+        return get_watchlist_item(match.group(1), user_id=user_id)
     return None
 
 
-def upsert_watchlist_item(record: dict[str, Any]) -> tuple[dict[str, Any], str]:
-    WATCHLIST_DIR.mkdir(parents=True, exist_ok=True)
+def upsert_watchlist_item(record: dict[str, Any], user_id: str | None = None) -> tuple[dict[str, Any], str]:
+    path = _path_for_user(user_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
 
-    watchlist = load_watchlist()
+    watchlist = load_watchlist(user_id)
     safe_ticker = _safe_ticker(str(record.get("ticker") or "UNKNOWN"))
     existing_items = [
         item
@@ -128,6 +144,7 @@ def upsert_watchlist_item(record: dict[str, Any]) -> tuple[dict[str, Any], str]:
 
     item = {
         "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "user_id": user_id or DEFAULT_USER_ID,
         **record,
         "ticker": safe_ticker,
     }
@@ -144,15 +161,15 @@ def upsert_watchlist_item(record: dict[str, Any]) -> tuple[dict[str, Any], str]:
         "updated_at": datetime.now().isoformat(timespec="seconds"),
         "items": existing_items[:MAX_WATCHLIST_ITEMS],
     }
-    WATCHLIST_PATH.write_text(
+    path.write_text(
         json.dumps(watchlist, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
-    return item, str(WATCHLIST_PATH)
+    return item, str(path)
 
 
-def top_watchlist_items(limit: int = 5) -> list[dict[str, Any]]:
-    return load_watchlist().get("items", [])[:limit]
+def top_watchlist_items(limit: int = 5, user_id: str | None = None) -> list[dict[str, Any]]:
+    return load_watchlist(user_id).get("items", [])[:limit]
 
 
 def is_watchlist_intent(text: str) -> bool:
@@ -163,14 +180,14 @@ def is_watchlist_intent(text: str) -> bool:
     return any(keyword.lower() in compact for keyword in WATCHLIST_KEYWORDS)
 
 
-def is_watchlist_detail_intent(text: str) -> bool:
+def is_watchlist_detail_intent(text: str, user_id: str | None = None) -> bool:
     normalized = text.strip().lower()
     if not normalized:
         return False
     compact = "".join(normalized.split())
     if not any(keyword.lower() in compact for keyword in WATCHLIST_DETAIL_KEYWORDS):
         return False
-    return find_watchlist_item_from_query(text) is not None
+    return find_watchlist_item_from_query(text, user_id=user_id) is not None
 
 
 def watchlist_limit_from_query(text: str, default: int = 10) -> int:
@@ -180,8 +197,8 @@ def watchlist_limit_from_query(text: str, default: int = 10) -> int:
     return max(1, min(50, int(match.group(1))))
 
 
-def format_watchlist_response(limit: int = 10) -> str:
-    watchlist = load_watchlist()
+def format_watchlist_response(limit: int = 10, user_id: str | None = None) -> str:
+    watchlist = load_watchlist(user_id)
     items = watchlist.get("items", [])[:limit]
     if not items:
         return """当前观察池还是空的。
@@ -198,7 +215,7 @@ def format_watchlist_response(limit: int = 10) -> str:
         f"## 当前观察池 Top {len(items)}",
         "",
         f"- 更新时间：**{watchlist.get('updated_at') or 'N/A'}**",
-        f"- 本地文件：`{WATCHLIST_PATH}`",
+        f"- 本地文件：`{_display_path_for_user(user_id)}`",
         "",
         "| 排名 | Ticker | 公司 | 优先级 | 分数 | 组合角色 | 评级 | 近1月涨跌幅 | 更新时间 |",
         "|---:|---|---|---|---:|---|---|---:|---|",
@@ -228,8 +245,11 @@ def format_watchlist_response(limit: int = 10) -> str:
     return "\n".join(lines)
 
 
-def format_watchlist_detail_response(text_or_ticker: str) -> str:
-    item = find_watchlist_item_from_query(text_or_ticker) or get_watchlist_item(text_or_ticker)
+def format_watchlist_detail_response(text_or_ticker: str, user_id: str | None = None) -> str:
+    item = find_watchlist_item_from_query(text_or_ticker, user_id=user_id) or get_watchlist_item(
+        text_or_ticker,
+        user_id=user_id,
+    )
     if not item:
         return f"""我没有在观察池里找到 `{text_or_ticker}`。
 

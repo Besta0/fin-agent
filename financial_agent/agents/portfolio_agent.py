@@ -134,6 +134,7 @@ def _priority_score(
 
 
 async def portfolio_node(state: ResearchState) -> ResearchState:
+    user_id = state.get("user_id")
     ticker = state.get("ticker") or ""
     if not ticker:
         portfolio = {
@@ -149,7 +150,7 @@ async def portfolio_node(state: ResearchState) -> ResearchState:
             ],
         }
 
-    watchlist = load_watchlist()
+    watchlist = load_watchlist(user_id)
     existing_items = watchlist.get("items", [])
     fundamentals = state.get("fundamentals", {})
     market_data = state.get("market_data", {})
@@ -202,13 +203,14 @@ async def portfolio_node(state: ResearchState) -> ResearchState:
         "news_count": news_count,
         "watch_reasons": watch_reasons,
     }
-    item, watchlist_path = upsert_watchlist_item(record)
-    top_items = top_watchlist_items(limit=5)
+    item, watchlist_path = upsert_watchlist_item(record, user_id=user_id)
+    top_items = top_watchlist_items(limit=5, user_id=user_id)
 
     portfolio = {
         "ok": True,
+        "user_id": user_id,
         "watchlist_path": watchlist_path,
-        "watchlist_size": len(load_watchlist().get("items", [])),
+        "watchlist_size": len(load_watchlist(user_id).get("items", [])),
         "status": "updated",
         "current_item": item,
         "priority_score": score,
