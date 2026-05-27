@@ -347,7 +347,8 @@ pass / warning / fail
 - 在 Verifier Agent 之后保存本次分析记录
 - 使用按用户隔离的本地 JSONL 文件作为轻量历史库
 - 每个用户、每个 ticker 一个文件：`outputs/users/{user_id}/history/{ticker}.jsonl`
-- 同步写入语义记忆：`outputs/users/{user_id}/memory/semantic_memory.jsonl`
+- 同步写入 JSONL 语义记忆：`outputs/users/{user_id}/memory/semantic_memory.jsonl`
+- 同步写入 SQLite 向量记忆：`outputs/users/{user_id}/memory/vector_memory.sqlite`
 
 保存字段：
 
@@ -370,13 +371,17 @@ report_path
 
 文件：`financial_agent/agents/memory_agent.py`
 
-工具：`financial_agent/tools/memory.py`
+工具：
+
+- `financial_agent/tools/memory.py`
+- `financial_agent/tools/vector_memory.py`
 
 职责：
 
 - 读取当前用户偏好，例如市场、行业、周期、风险和输出风格
 - 从用户输入中更新偏好记忆，例如“记住我偏好短线，只看科技股”
-- 检索同一用户的语义记忆，找到相关历史报告摘要
+- 优先检索同一用户的 SQLite 向量记忆，找到相关历史报告摘要
+- 如果 SQLite 向量记忆为空，则 fallback 到 JSONL 语义记忆
 - 把用户偏好和相关历史记忆提供给 Report Agent
 
 本地存储：
@@ -384,6 +389,7 @@ report_path
 ```text
 outputs/users/{user_id}/memory/preferences.json
 outputs/users/{user_id}/memory/semantic_memory.jsonl
+outputs/users/{user_id}/memory/vector_memory.sqlite
 ```
 
 ## 状态对象
@@ -487,6 +493,7 @@ History: append JSONL record
 │   │   ├── market_data.py
 │   │   ├── memory.py
 │   │   ├── news.py
+│   │   ├── vector_memory.py
 │   │   └── watchlist.py
 │   ├── cli.py
 │   ├── help.py
@@ -593,7 +600,7 @@ python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 - Watchlist Detail Intent：用户问“为什么某个 ticker 是核心跟踪 / 观察池详情”时返回该标的跟踪理由
 - 早停路由：无法识别 ticker 或问题不是股票投研时，不启动后续分析 Agent
 - 用户偏好记忆：保存市场、行业、周期、风险和输出风格偏好
-- RAG 语义记忆：按用户检索历史报告摘要，为新报告提供上下文
+- RAG 语义记忆：按用户用 SQLite + 本地 TF-IDF/Hash Embedding 检索历史报告摘要
 - 多用户隔离记忆：history、watchlist、reports、preferences、semantic memory 按 user_id 分目录保存
 - 规则 + LLM fallback ticker 识别
 - 美股行情拉取
@@ -615,7 +622,7 @@ python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 - 基本面数据可能出现 partial fallback
 - 新闻质量取决于 yfinance 返回结果，可能包含相关但不完全聚焦的文章
 - Verifier 当前是规则质检，不会自动重写报告
-- 当前语义记忆使用本地轻量检索，不是向量数据库；后续可替换为 Chroma / FAISS / Qdrant
+- 当前向量记忆是本地 SQLite + Hash/TF-IDF 实现，适合 MVP；后续可替换为 Chroma / FAISS / Qdrant
 - 当前主要面向美股，A 股和港股 ticker 支持有限
 
 ## 后续路线

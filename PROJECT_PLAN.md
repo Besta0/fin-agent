@@ -88,9 +88,10 @@
 
 - 使用 `outputs/users/{user_id}/memory/preferences.json` 保存偏好
 - 使用 `outputs/users/{user_id}/memory/semantic_memory.jsonl` 保存历史报告摘要
+- 使用 `outputs/users/{user_id}/memory/vector_memory.sqlite` 保存 Hash/TF-IDF 向量记忆
 - 支持“记住我偏好短线，只看科技股”
 - 支持“以前分析过 NVDA 吗 / 查一下历史报告”
-- 使用本地轻量语义检索，后续可替换为向量数据库
+- 优先使用 SQLite + 本地 TF-IDF/Hash Embedding 检索，JSONL 作为兼容备份
 
 ### Review Agent
 
@@ -243,7 +244,7 @@
 
 - 每个用户、每个 ticker 使用一个 JSONL 文件
 - 保存 timestamp、ticker、horizon、price、rating、confidence、portfolio_priority、portfolio_score、portfolio_role、verification_status 和 report_path
-- 同步写入语义记忆，供后续 RAG 检索
+- 同步写入 JSONL 语义记忆和 SQLite 向量记忆，供后续 RAG 检索
 
 ## 5. 当前技术架构
 

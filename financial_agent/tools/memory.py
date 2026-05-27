@@ -292,6 +292,15 @@ def search_semantic_memory(
     query: str,
     limit: int = 5,
 ) -> list[dict[str, Any]]:
+    try:
+        from financial_agent.tools.vector_memory import search_vector_memory
+
+        vector_results = search_vector_memory(user_id, query, limit=limit)
+    except Exception:
+        vector_results = []
+    if vector_results:
+        return vector_results
+
     query_tokens = Counter(_tokens(query))
     scored: list[tuple[float, dict[str, Any]]] = []
     for memory in load_semantic_memories(user_id):
@@ -301,7 +310,7 @@ def search_semantic_memory(
         )
         score = _score(query_tokens, searchable)
         if score > 0:
-            scored.append((score, {**memory, "score": round(score, 3)}))
+            scored.append((score, {**memory, "score": round(score, 3), "source": "jsonl_semantic_memory"}))
     scored.sort(key=lambda item: item[0], reverse=True)
     return [memory for _, memory in scored[:limit]]
 
@@ -318,6 +327,7 @@ def format_semantic_memory_response(user_id: str | None, query: str, limit: int 
         "",
         f"- 用户：`{safe_user_id(user_id)}`",
         f"- 查询：{query}",
+        f"- 检索后端：**{memories[0].get('source', 'unknown')}**",
         "",
     ]
     for idx, memory in enumerate(memories, start=1):
