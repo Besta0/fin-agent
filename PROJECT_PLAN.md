@@ -211,6 +211,21 @@
 - 输出 进攻观察 / 趋势跟踪 / 中性跟踪 / 防守观察 / 风险警戒 等组合角色
 - 在 Chainlit 中展示观察池 Top 5
 
+### Dashboard
+
+职责：
+
+- 把观察池、记忆库和最近报告聚合成投研工作台
+- 给用户一个从“聊天”进入“产品界面”的入口
+- 输出下一步可复制动作，降低用户不知道该问什么的成本
+
+当前实现：
+
+- 使用 `financial_agent/tools/dashboard.py` 渲染 Markdown 工作台
+- 支持 `投研工作台`、`dashboard`、`/dashboard`、`仪表盘` 等 direct intent
+- 展示观察池 Top 标的、SQLite 向量记忆数量、JSONL 语义备份数量、最近向量记忆和最近报告
+- Chainlit 和 CLI 共用同一套 dashboard 渲染逻辑
+
 ### Report Agent
 
 职责：
@@ -261,6 +276,7 @@ Chainlit UI
   ↓
 Intent Router
   ├─ Help Intent → 能力说明和示例问题
+  ├─ Dashboard Intent → 投研工作台
   ├─ Watchlist Intent → 观察池表格
   ├─ Watchlist Detail Intent → 单个标的跟踪理由
   ↓

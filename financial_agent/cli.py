@@ -5,6 +5,7 @@ import os
 import sys
 
 from financial_agent.help import HELP_MESSAGE, is_help_intent
+from financial_agent.tools.dashboard import format_dashboard_response, is_dashboard_intent
 from financial_agent.tools.memory import (
     DEFAULT_USER_ID,
     format_preferences_response,
@@ -35,6 +36,10 @@ async def main() -> int:
 
     if is_help_intent(query):
         print(HELP_MESSAGE)
+        return 0
+
+    if is_dashboard_intent(query):
+        print(format_dashboard_response(user_id))
         return 0
 
     if is_preference_intent(query) and not any(

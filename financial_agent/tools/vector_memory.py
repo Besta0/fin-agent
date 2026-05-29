@@ -186,6 +186,31 @@ def _load_rows(user_id: str | None = None) -> list[dict[str, Any]]:
     return records
 
 
+def recent_vector_memories(user_id: str | None = None, limit: int = 5) -> list[dict[str, Any]]:
+    rows = _load_rows(user_id)
+    return [
+        {
+            "id": row.get("id"),
+            "user_id": row.get("user_id"),
+            "timestamp": row.get("timestamp"),
+            "ticker": row.get("ticker"),
+            "company_name": row.get("company_name"),
+            "title": row.get("title"),
+            "rating": row.get("rating"),
+            "confidence": row.get("confidence"),
+            "summary": row.get("summary"),
+            "report_path": row.get("report_path"),
+            "metadata": row.get("metadata") or {},
+            "source": "sqlite_vector_memory",
+        }
+        for row in rows[: max(0, limit)]
+    ]
+
+
+def count_vector_memories(user_id: str | None = None) -> int:
+    return len(_load_rows(user_id))
+
+
 def _document_frequency(rows: list[dict[str, Any]]) -> Counter[str]:
     df: Counter[str] = Counter()
     for row in rows:

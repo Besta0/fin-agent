@@ -5,6 +5,7 @@ import chainlit as cl
 from financial_agent.graph.workflow import build_research_graph
 from financial_agent.help import HELP_MESSAGE, is_help_intent
 from financial_agent.tools.charting import build_price_chart
+from financial_agent.tools.dashboard import format_dashboard_response, is_dashboard_intent
 from financial_agent.tools.memory import (
     format_preferences_response,
     format_semantic_memory_response,
@@ -298,6 +299,10 @@ async def on_message(message: cl.Message) -> None:
 
     if is_help_intent(user_query):
         await cl.Message(content=HELP_MESSAGE).send()
+        return
+
+    if is_dashboard_intent(user_query):
+        await cl.Message(content=format_dashboard_response(user_id)).send()
         return
 
     if is_preference_intent(user_query) and not any(

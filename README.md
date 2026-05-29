@@ -285,6 +285,25 @@ committee_view
 portfolio
 ```
 
+### Dashboard
+
+文件：`financial_agent/tools/dashboard.py`
+
+职责：
+
+- 在 Chainlit 和 CLI 中提供投研工作台入口
+- 汇总观察池 Top 标的、SQLite 向量记忆、JSONL 语义备份和最近 Markdown 报告
+- 输出可复制的下一步动作，例如重新分析、查看观察池详情、检索历史记忆
+
+触发方式：
+
+```text
+投研工作台
+/dashboard
+dashboard
+仪表盘
+```
+
 ### Report Agent
 
 文件：`financial_agent/agents/report_agent.py`
@@ -491,6 +510,7 @@ History: append JSONL record
 │   │   └── workflow.py
 │   ├── tools
 │   │   ├── charting.py
+│   │   ├── dashboard.py
 │   │   ├── fundamentals.py
 │   │   ├── history.py
 │   │   ├── indicators.py
@@ -588,6 +608,7 @@ python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 你能做什么
 记住我偏好短线，只看科技股
 以前分析过 NVDA 吗
+投研工作台
 查看观察池
 观察池里优先级最高的是谁
 为什么 NVDA 是核心跟踪
@@ -600,6 +621,7 @@ python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 
 - 中文自然语言输入
 - Help Intent：用户问“你能做什么 / 怎么用 / 帮助”时直接返回功能说明
+- Dashboard Intent：用户问“投研工作台 / dashboard / 仪表盘”时返回观察池、记忆库和最近报告总览
 - Watchlist Intent：用户问“查看观察池 / 我的 watchlist / 优先级最高”时直接返回观察池表格
 - Watchlist Detail Intent：用户问“为什么某个 ticker 是核心跟踪 / 观察池详情”时返回该标的跟踪理由
 - 早停路由：无法识别 ticker 或问题不是股票投研时，不启动后续分析 Agent
