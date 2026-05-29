@@ -21,6 +21,7 @@ PROHIBITED_ADVICE = [
 
 
 RATING_ORDER = ["偏多", "中性偏多", "中性", "中性偏空", "偏空"]
+RATING_MATCH_ORDER = sorted(RATING_ORDER, key=len, reverse=True)
 
 
 def _issue(severity: str, category: str, message: str) -> dict[str, str]:
@@ -56,7 +57,7 @@ def _format_verification(verification: dict[str, Any]) -> str:
     return f"""## 质量检查
 
 - 状态：**{status_label}**
-- 检查项：评级一致性、关键数字、财报日期语义、投资建议措辞、资料线索
+- 检查项：评级一致性、关键数字、财报日期语义、投资建议措辞、资料线索、记忆引用
 
 发现问题：
 {issue_text or "未发现明显问题。"}
@@ -88,7 +89,12 @@ def _check_rating(report: str, state: ResearchState, issues: list[dict[str, str]
     ]
     contradictory = []
     for line in conclusion_lines:
-        contradictory.extend(rating for rating in RATING_ORDER if rating in line and rating != expected)
+        remaining = line
+        for rating in RATING_MATCH_ORDER:
+            if rating in remaining:
+                if rating != expected:
+                    contradictory.append(rating)
+                remaining = remaining.replace(rating, "")
     if contradictory:
         issues.append(
             _issue(
@@ -202,6 +208,64 @@ def _check_sources(report: str, state: ResearchState, issues: list[dict[str, str
         )
 
 
+def _as_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _check_memory_references(report: str, state: ResearchState, issues: list[dict[str, str]]) -> None:
+    memory_context = state.get("memory_context", {})
+    references = memory_context.get("report_references") or []
+    if not references:
+        return
+
+    if "历史记忆参考" not in report:
+        issues.append(
+            _issue(
+                "medium",
+                "memory_reference",
+                "Memory Agent 提供了可引用历史记忆，但报告缺少“历史记忆参考”部分。",
+            )
+        )
+
+    report_paths = [
+        str(memory.get("report_path"))
+        for memory in references
+        if memory.get("report_path") and str(memory.get("report_path")) != "N/A"
+    ]
+    if report_paths and not any(path in report for path in report_paths):
+        issues.append(
+            _issue(
+                "medium",
+                "memory_reference",
+                "报告引用历史记忆时没有保留旧报告路径，用户难以追溯来源。",
+            )
+        )
+
+    threshold = _as_float(memory_context.get("memory_guidance", {}).get("report_reference_threshold"), 0.35)
+    low_score_refs = [
+        memory
+        for memory in references
+        if memory.get("score") is not None and _as_float(memory.get("score")) < threshold
+    ]
+    ticker = str(state.get("ticker") or "").upper()
+    unsupported = [
+        memory
+        for memory in low_score_refs
+        if str(memory.get("ticker") or "").upper() != ticker
+    ]
+    if unsupported:
+        issues.append(
+            _issue(
+                "medium",
+                "memory_reference",
+                "报告引用列表包含低相似度且非同 ticker 的记忆，请确认是否应降级为内部参考。",
+            )
+        )
+
+
 def _build_suggestions(issues: list[dict[str, str]]) -> list[str]:
     if not issues:
         return []
@@ -218,6 +282,8 @@ def _build_suggestions(issues: list[dict[str, str]]) -> list[str]:
         suggestions.append("将直接买卖措辞改成研究性表达，例如“评级偏多/中性/偏空”。")
     if "source_links" in categories:
         suggestions.append("保留资料线索章节，方便用户追溯新闻来源。")
+    if "memory_reference" in categories:
+        suggestions.append("历史记忆进入报告正文时，应写明摘要、相似度、检索后端和旧报告路径。")
     if "number_reference" in categories:
         suggestions.append("低优先级：可补充关键结构化数值，让报告更可核验。")
     return suggestions
@@ -245,6 +311,7 @@ async def verifier_node(state: ResearchState) -> ResearchState:
         _check_earnings_date(report, state, issues)
         _check_advice_language(report, issues)
         _check_sources(report, state, issues)
+        _check_memory_references(report, state, issues)
 
     verification = {
         "status": _status_from_issues(issues),

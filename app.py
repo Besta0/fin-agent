@@ -190,11 +190,15 @@ def _brief_update(node_name: str, update: dict) -> str:
     if node_name == "memory":
         memory_context = update.get("memory_context", {})
         updates = memory_context.get("preference_updates", [])
-        memories = memory_context.get("relevant_memories", [])
+        ticker_memories = memory_context.get("ticker_history", [])
+        semantic_memories = memory_context.get("semantic_memories", [])
+        guidance = memory_context.get("memory_guidance", {})
         update_text = "；".join(updates) if updates else "无新增偏好"
         return (
             f"已加载用户记忆。偏好更新：**{update_text}**；"
-            f"相关历史记忆：**{len(memories)}** 条。"
+            f"同标的历史：**{len(ticker_memories)}** 条；"
+            f"语义相似记忆：**{len(semantic_memories)}** 条；"
+            f"关注点：**{', '.join(guidance.get('focus_points', [])[:3]) or '暂无'}**。"
         )
 
     if node_name == "review":
@@ -231,6 +235,7 @@ def _brief_update(node_name: str, update: dict) -> str:
     if node_name == "committee":
         view = update.get("committee_view", {})
         reasons = view.get("key_reasons", [])
+        memory_influence = view.get("memory_influence", {})
         reason_text = "\n".join(f"{idx}. {reason}" for idx, reason in enumerate(reasons, start=1))
         return (
             f"投委会结论：**{view.get('rating', 'N/A')}**；"
@@ -238,6 +243,7 @@ def _brief_update(node_name: str, update: dict) -> str:
             f"多空强度：Bull **{view.get('bull_confidence', 'N/A')}%** / "
             f"Bear **{view.get('bear_confidence', 'N/A')}%**\n\n"
             f"关键依据：\n{reason_text or '暂无'}\n\n"
+            f"记忆影响：{memory_influence.get('summary', '暂无历史记忆影响。')}\n\n"
             f"不确定性：{view.get('uncertainty', '暂无')}"
         )
 

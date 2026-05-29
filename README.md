@@ -382,7 +382,10 @@ report_path
 - 从用户输入中更新偏好记忆，例如“记住我偏好短线，只看科技股”
 - 优先检索同一用户的 SQLite 向量记忆，找到相关历史报告摘要
 - 如果 SQLite 向量记忆为空，则 fallback 到 JSONL 语义记忆
-- 把用户偏好和相关历史记忆提供给 Report Agent
+- 自动区分同 ticker 历史、语义相似历史和可进入报告正文的历史引用
+- 生成 `memory_guidance`，把关注点、延续风险、历史 thesis 和上次评级提供给后续 Agent
+- 在用户没有明确周期时，可用用户偏好补全默认分析周期
+- 把用户偏好和历史记忆提供给 Committee Agent 与 Report Agent
 
 本地存储：
 
@@ -406,6 +409,7 @@ class ResearchState(TypedDict, total=False):
     ticker_resolution: dict[str, Any]
     analysis_modules: list[str]
     market_data: dict[str, Any]
+    memory_context: dict[str, Any]
     review: dict[str, Any]
     technicals: dict[str, Any]
     fundamentals: dict[str, Any]
@@ -601,6 +605,8 @@ python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 - 早停路由：无法识别 ticker 或问题不是股票投研时，不启动后续分析 Agent
 - 用户偏好记忆：保存市场、行业、周期、风险和输出风格偏好
 - RAG 语义记忆：按用户用 SQLite + 本地 TF-IDF/Hash Embedding 检索历史报告摘要
+- Memory-Augmented Report：报告会主动引用历史记忆、相似度、检索后端和旧报告路径
+- 观点变化追踪：Committee Agent 会对比历史评级和本次评级，输出维持、上调或下调原因
 - 多用户隔离记忆：history、watchlist、reports、preferences、semantic memory 按 user_id 分目录保存
 - 规则 + LLM fallback ticker 识别
 - 美股行情拉取
@@ -621,7 +627,7 @@ python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 - 数据主要来自 yfinance，数据完整性和稳定性取决于 Yahoo Finance
 - 基本面数据可能出现 partial fallback
 - 新闻质量取决于 yfinance 返回结果，可能包含相关但不完全聚焦的文章
-- Verifier 当前是规则质检，不会自动重写报告
+- Verifier 当前是规则质检，不会自动重写报告，但会检查记忆引用是否可追溯
 - 当前向量记忆是本地 SQLite + Hash/TF-IDF 实现，适合 MVP；后续可替换为 Chroma / FAISS / Qdrant
 - 当前主要面向美股，A 股和港股 ticker 支持有限
 

@@ -92,6 +92,13 @@
 - 支持“记住我偏好短线，只看科技股”
 - 支持“以前分析过 NVDA 吗 / 查一下历史报告”
 - 优先使用 SQLite + 本地 TF-IDF/Hash Embedding 检索，JSONL 作为兼容备份
+- 自动生成 `memory_context`：
+  - `ticker_history`：同标的历史观点
+  - `semantic_memories`：语义相似历史报告
+  - `report_references`：可进入报告正文的可追溯引用
+  - `memory_guidance`：关注点、延续风险、历史 thesis、上次评级和旧报告路径
+- 在用户未明确周期时，使用偏好记忆补全默认 horizon
+- 为 Committee Agent 提供观点变化依据，为 Report Agent 提供历史记忆参考
 
 ### Review Agent
 
@@ -231,7 +238,8 @@
 
 - 使用本地规则检查，不额外调用 LLM
 - 输出 `pass` / `warning` / `fail`
-- 将质检后的报告保存为 `outputs/reports/*_verified_*.md`
+- 检查历史记忆引用是否包含摘要、相似度、检索后端和旧报告路径
+- 将质检后的报告保存为 `outputs/users/{user_id}/reports/*_verified_*.md`
 
 ### History Agent
 

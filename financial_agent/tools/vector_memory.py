@@ -40,6 +40,8 @@ def _init_db(conn: sqlite3.Connection) -> None:
             ticker TEXT,
             company_name TEXT,
             title TEXT,
+            rating TEXT,
+            confidence REAL,
             summary TEXT,
             report_path TEXT,
             metadata_json TEXT,
@@ -54,7 +56,15 @@ def _init_db(conn: sqlite3.Connection) -> None:
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_vector_memories_ticker ON vector_memories(user_id, ticker)"
     )
+    _ensure_column(conn, "rating", "TEXT")
+    _ensure_column(conn, "confidence", "REAL")
     conn.commit()
+
+
+def _ensure_column(conn: sqlite3.Connection, name: str, column_type: str) -> None:
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(vector_memories)")}
+    if name not in columns:
+        conn.execute(f"ALTER TABLE vector_memories ADD COLUMN {name} {column_type}")
 
 
 def _tokens(text: str) -> list[str]:
@@ -102,13 +112,15 @@ def append_vector_memory(user_id: str | None, record: dict[str, Any]) -> str:
                 ticker,
                 company_name,
                 title,
+                rating,
+                confidence,
                 summary,
                 report_path,
                 metadata_json,
                 text,
                 vector_json
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 safe_id,
@@ -116,6 +128,8 @@ def append_vector_memory(user_id: str | None, record: dict[str, Any]) -> str:
                 record.get("ticker"),
                 record.get("company_name"),
                 record.get("title"),
+                record.get("rating"),
+                record.get("confidence"),
                 record.get("summary"),
                 record.get("report_path"),
                 json.dumps(metadata, ensure_ascii=False),
@@ -143,6 +157,8 @@ def _load_rows(user_id: str | None = None) -> list[dict[str, Any]]:
                 ticker,
                 company_name,
                 title,
+                rating,
+                confidence,
                 summary,
                 report_path,
                 metadata_json,
@@ -236,6 +252,8 @@ def search_vector_memory(
                     "ticker": row.get("ticker"),
                     "company_name": row.get("company_name"),
                     "title": row.get("title"),
+                    "rating": row.get("rating"),
+                    "confidence": row.get("confidence"),
                     "summary": row.get("summary"),
                     "report_path": row.get("report_path"),
                     "metadata": row.get("metadata") or {},

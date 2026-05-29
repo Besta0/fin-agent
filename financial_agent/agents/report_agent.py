@@ -122,19 +122,53 @@ def _format_memory_context(memory_context: dict) -> str:
 
     preferences = memory_context.get("preferences") or {}
     updates = memory_context.get("preference_updates") or []
-    memories = memory_context.get("relevant_memories") or []
-    memory_text = "\n".join(
-        f"{idx}. {item.get('ticker', 'N/A')}：{item.get('summary', '暂无摘要')}"
-        for idx, item in enumerate(memories[:3], start=1)
-    )
+    guidance = memory_context.get("memory_guidance") or {}
+    focus_points = guidance.get("focus_points") or []
+    known_risks = guidance.get("known_risks") or []
     return f"""- 用户：`{memory_context.get("user_id") or "default"}`
 - 市场偏好：**{", ".join(preferences.get("markets") or []) or "暂无"}**
 - 行业偏好：**{", ".join(preferences.get("sectors") or []) or "暂无"}**
 - 周期 / 风险 / 输出偏好：**{preferences.get("horizon") or "暂无"} / {preferences.get("risk_profile") or "暂无"} / {preferences.get("output_style") or "暂无"}**
 - 本次新增偏好：{", ".join(updates) or "暂无"}
+- 记忆提示关注点：{", ".join(focus_points) or "暂无"}
+- 历史延续风险：{", ".join(known_risks) or "暂无"}"""
 
-相关语义记忆：
-{memory_text or "暂无相关历史记忆。"}"""
+
+def _format_memory_references(memory_context: dict) -> str:
+    if not memory_context:
+        return "暂无可引用历史记忆。"
+
+    references = memory_context.get("report_references") or []
+    guidance = memory_context.get("memory_guidance") or {}
+    if not references:
+        return (
+            "暂无达到报告引用阈值的历史语义记忆。"
+            f"当前引用阈值：{guidance.get('report_reference_threshold', 'N/A')}。"
+        )
+
+    lines = []
+    for idx, memory in enumerate(references[:3], start=1):
+        score = memory.get("score", "N/A")
+        source = memory.get("source", "unknown")
+        timestamp = memory.get("timestamp", "N/A")
+        rating = memory.get("rating", "N/A")
+        confidence = memory.get("confidence", "N/A")
+        report_path = memory.get("report_path") or "N/A"
+        lines.extend(
+            [
+                f"{idx}. **{memory.get('ticker', 'N/A')} - {memory.get('title', '历史投研记录')}**",
+                f"   - 时间：{timestamp}",
+                f"   - 相似度 / 来源：{score} / `{source}`",
+                f"   - 评级 / 置信度：{rating} / {confidence}%",
+                f"   - 报告路径：`{report_path}`",
+                f"   - 摘要：{memory.get('summary') or '暂无摘要'}",
+            ]
+        )
+
+    previous = guidance.get("previous_thesis")
+    if previous:
+        lines.append(f"\n历史 thesis：{previous}")
+    return "\n".join(lines)
 
 
 def _format_portfolio(portfolio: dict) -> str:
@@ -199,11 +233,14 @@ def _format_committee_view(committee_view: dict) -> str:
 
     reasons = committee_view.get("key_reasons", [])
     reason_text = "\n".join(f"{idx}. {reason}" for idx, reason in enumerate(reasons[:4], start=1))
+    memory_influence = committee_view.get("memory_influence") or {}
+    memory_text = memory_influence.get("summary") or "暂无历史记忆影响。"
     return f"""- 投委会结论：**{committee_view.get("rating", "N/A")}**
 - 置信度：**{committee_view.get("confidence", "N/A")}%**
 - 多空强度：Bull **{committee_view.get("bull_confidence", "N/A")}%** / Bear **{committee_view.get("bear_confidence", "N/A")}%**
 - 关键依据：
 {reason_text or "暂无"}
+- 记忆影响：{memory_text}
 - 最大不确定性：{committee_view.get("uncertainty", "暂无")}"""
 
 
@@ -270,15 +307,19 @@ def _fallback_report(state: ResearchState) -> str:
 
 {_format_memory_context(memory_context)}
 
-## 3. 历史复盘
+## 3. 历史记忆参考
+
+{_format_memory_references(memory_context)}
+
+## 4. 历史复盘
 
 {_format_review(review)}
 
-## 4. 组合观察池
+## 5. 组合观察池
 
 {_format_portfolio(portfolio)}
 
-## 5. 行情摘要
+## 6. 行情摘要
 
 - 最新收盘价：**{price}**
 - 最新成交量：**{volume}**
@@ -287,7 +328,7 @@ def _fallback_report(state: ResearchState) -> str:
 - 近 1 月涨跌幅：**{returns.get("1m", "N/A")}%**
 - 近 3 月涨跌幅：**{returns.get("3m", "N/A")}%**
 
-## 6. 技术面判断
+## 7. 技术面判断
 
 - 趋势：**{technicals.get("trend_label", "暂无判断")}**
 - MA20：**{technicals.get("ma_20", "N/A")}**
@@ -295,25 +336,25 @@ def _fallback_report(state: ResearchState) -> str:
 - RSI(14)：**{technicals.get("rsi_14", "N/A")}**
 - MACD：**{technicals.get("macd_signal_label", "N/A")}**
 
-## 7. 基本面与估值
+## 8. 基本面与估值
 
 {_format_fundamentals(fundamentals)}
 
-## 8. 多空观点对比
+## 9. 多空观点对比
 
 {_format_research_case("Bull Agent 看多观点", bull_case, "weak_points")}
 
 {_format_research_case("Bear Agent 看空观点", bear_case, "rebuttals")}
 
-## 9. 新闻与催化
+## 10. 新闻与催化
 
 {_format_news(news)}
 
-## 10. 主要风险
+## 11. 主要风险
 
 {risk_text}
 
-## 11. 后续观察指标
+## 12. 后续观察指标
 
 1. 后续财报或已发布财报中的收入增速、利润率和管理层指引。
 2. 股价能否站稳关键均线，以及成交量是否配合。
@@ -359,7 +400,8 @@ def _build_llm_prompt(state: ResearchState, fallback_rating: str, confidence: in
 11. 如果 review.has_history 为 true，必须包含“历史复盘”部分；如果为 false，说明本次是首条记录。
 12. 必须包含“组合观察池”部分，说明 portfolio 的优先级、组合角色和跟踪理由。
 13. 如果 memory_context.preferences 有用户偏好，报告应尊重偏好的周期、市场、行业和输出风格。
-14. 如果 memory_context.relevant_memories 有相关历史记忆，应在复盘或后续观察中引用其摘要，不要编造记忆外内容。
+14. 如果 memory_context.report_references 有相关历史记忆，必须新增“历史记忆参考”部分，引用摘要、相似度、source 和 report_path，不要编造记忆外内容。
+15. 如果 committee_view.memory_influence.used 为 true，必须写清楚本次观点相对历史观点是维持、上调还是下调。
 
 结构化数据：
 ```json
