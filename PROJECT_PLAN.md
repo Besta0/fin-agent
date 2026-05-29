@@ -255,6 +255,7 @@
 
 - 使用 `financial_agent/tools/settings_panel.py` 渲染设置面板
 - 支持 `模型设置`、`查看模型配置`、`小米配置`、`测试模型连接`
+- Chainlit 首页提供 starter cards 和快捷按钮，侧边栏 Chat Settings 只读展示当前模型配置
 - 内置 provider：OpenAI、DeepSeek、MiniMax、Xiaomi MiMo
 - Xiaomi MiMo 支持 `LLM_PROVIDER=xiaomi` 或 `LLM_PROVIDER=mimo`
 - Xiaomi MiMo 默认 `LLM_BASE_URL=https://api.xiaomimimo.com/v1`，默认模型 `mimo-v2.5-pro`

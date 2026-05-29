@@ -334,6 +334,7 @@ dashboard
 - 隐藏完整 API key，只显示是否已配置和末尾片段
 - 支持“测试模型连接”，发起一次最小 LLM 请求验证配置
 - 提供 OpenAI、DeepSeek、MiniMax、小米 MiMo 配置模板
+- Chainlit 首页提供 starter cards 和快捷按钮；侧边栏 Chat Settings 只读展示当前模型配置
 
 触发方式：
 
@@ -343,6 +344,13 @@ dashboard
 测试模型连接
 小米配置
 ```
+
+Chainlit UI 中可以直接点击：
+
+- 模型设置
+- 测试连接
+- 小米配置
+- 投研工作台
 
 ### Report Agent
 

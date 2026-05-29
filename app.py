@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import chainlit as cl
+from chainlit.input_widget import Select, TextInput
 
 from financial_agent.graph.workflow import build_research_graph
 from financial_agent.help import HELP_MESSAGE, is_help_intent
@@ -25,6 +26,7 @@ from financial_agent.tools.settings_panel import (
     is_connection_test_intent,
     is_settings_intent,
 )
+from financial_agent.settings import PROVIDER_DEFAULTS, settings
 from financial_agent.tools.watchlist import (
     format_watchlist_detail_response,
     format_watchlist_response,
@@ -50,6 +52,108 @@ AGENT_TITLES = {
     "verifier": "Verifier Agent",
     "history": "History Agent",
 }
+
+PROVIDER_LABELS = {
+    "openai": "OpenAI",
+    "deepseek": "DeepSeek",
+    "minimax": "MiniMax",
+    "xiaomi": "Xiaomi MiMo",
+    "mimo": "Xiaomi MiMo",
+}
+
+QUICK_ACTION_DEFS = [
+    (
+        "settings",
+        "模型设置",
+        "查看当前 provider、model、base_url 和 API key 状态",
+        "settings",
+    ),
+    (
+        "connection_test",
+        "测试连接",
+        "发起一次最小 LLM 请求，验证当前模型配置",
+        "plug",
+    ),
+    (
+        "xiaomi",
+        "小米配置",
+        "查看 Xiaomi MiMo 的配置模板",
+        "cpu",
+    ),
+    (
+        "dashboard",
+        "投研工作台",
+        "打开观察池、记忆库和最近报告总览",
+        "layout-dashboard",
+    ),
+]
+
+
+def _mask_api_key(value: str | None) -> str:
+    if not value:
+        return "未配置"
+    if len(value) <= 8:
+        return "已配置 ****"
+    return f"已配置 {value[:3]}****{value[-4:]}"
+
+
+def _provider_label(provider: str) -> str:
+    return PROVIDER_LABELS.get(provider, f"{provider} (OpenAI-compatible)")
+
+
+def _quick_actions() -> list[cl.Action]:
+    return [
+        cl.Action(
+            name="quick_action",
+            payload={"intent": intent},
+            label=label,
+            tooltip=tooltip,
+            icon=icon,
+        )
+        for intent, label, tooltip, icon in QUICK_ACTION_DEFS
+    ]
+
+
+async def _send_settings_widgets() -> None:
+    provider_values = list(PROVIDER_DEFAULTS.keys())
+    provider = settings.llm_provider if settings.llm_provider in provider_values else "openai"
+    initial_index = provider_values.index(provider)
+
+    await cl.ChatSettings(
+        [
+            Select(
+                id="llm_provider_view",
+                label="当前 Provider（来自 .env，只读）",
+                values=provider_values,
+                initial_index=initial_index,
+                disabled=True,
+            ),
+            TextInput(
+                id="llm_provider_label_view",
+                label="Provider 名称",
+                initial=_provider_label(settings.llm_provider),
+                disabled=True,
+            ),
+            TextInput(
+                id="llm_model_view",
+                label="当前模型",
+                initial=settings.llm_model,
+                disabled=True,
+            ),
+            TextInput(
+                id="llm_base_url_view",
+                label="Base URL",
+                initial=settings.llm_base_url or "N/A",
+                disabled=True,
+            ),
+            TextInput(
+                id="llm_key_status_view",
+                label="API Key 状态",
+                initial=f"{_mask_api_key(settings.llm_api_key)}；来源：{settings.llm_api_key_source or 'N/A'}",
+                disabled=True,
+            ),
+        ]
+    ).send()
 
 
 def _current_user_id() -> str:
@@ -295,9 +399,70 @@ def _brief_update(node_name: str, update: dict) -> str:
     return "节点已完成。"
 
 
+@cl.set_starters
+async def set_starters():
+    return [
+        cl.Starter(
+            label="模型设置",
+            message="模型设置",
+            icon="settings",
+        ),
+        cl.Starter(
+            label="测试模型连接",
+            message="测试模型连接",
+            icon="plug",
+        ),
+        cl.Starter(
+            label="小米 MiMo 配置",
+            message="小米配置",
+            icon="cpu",
+        ),
+        cl.Starter(
+            label="投研工作台",
+            message="投研工作台",
+            icon="layout-dashboard",
+        ),
+        cl.Starter(
+            label="分析英伟达",
+            message="分析一下英伟达最近走势",
+            icon="search",
+        ),
+    ]
+
+
 @cl.on_chat_start
 async def on_chat_start() -> None:
-    await cl.Message(content=HELP_MESSAGE).send()
+    await _send_settings_widgets()
+    await cl.Message(
+        content=(
+            "欢迎使用 Fin Agent。你可以直接点下面的快捷按钮，"
+            "也可以在左侧/顶部的设置面板查看当前模型配置。\n\n"
+            f"{HELP_MESSAGE}"
+        ),
+        actions=_quick_actions(),
+    ).send()
+
+
+@cl.action_callback("quick_action")
+async def on_quick_action(action: cl.Action) -> None:
+    intent = action.payload.get("intent")
+    user_id = _current_user_id()
+
+    if intent == "settings":
+        await cl.Message(content=await format_settings_response()).send()
+        return
+
+    if intent == "connection_test":
+        await cl.Message(content=await format_settings_response(test_connection=True)).send()
+        return
+
+    if intent == "xiaomi":
+        await cl.Message(content=await format_settings_response()).send()
+        return
+
+    if intent == "dashboard":
+        await cl.Message(content=format_dashboard_response(user_id)).send()
+        return
 
 
 @cl.on_message
