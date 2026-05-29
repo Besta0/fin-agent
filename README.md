@@ -336,6 +336,7 @@ dashboard
 - 提供 OpenAI、DeepSeek、MiniMax、小米 MiMo 配置模板
 - Chainlit 首页提供 starter cards 和快捷按钮
 - 侧边栏 Chat Settings 支持用户配置自己的 provider、model、base_url、API key 和 temperature
+- Model 下拉选项会随 Provider 自动切换；Base URL 也会随 Provider 自动刷新为默认值
 - UI 配置只对当前会话生效，不写入 `.env`、报告或记忆库；刷新或重启后回退到服务端配置
 
 触发方式：
@@ -357,8 +358,8 @@ Chainlit UI 中可以直接点击：
 Chainlit 侧边栏可以直接配置：
 
 - Provider：OpenAI、DeepSeek、MiniMax、Xiaomi MiMo
-- 模型：填写该 provider 支持的模型名
-- Base URL：OpenAI 官方接口可留空，兼容接口填写 provider base URL
+- 模型：按 Provider 提供下拉选择；如果新模型尚未加入列表，可以用“自定义模型名”覆盖
+- Base URL：切换 Provider 后自动刷新默认值；OpenAI 官方接口可留空，兼容接口可手动覆盖
 - API Key：留空则继续使用当前 key；填写后本会话使用用户自己的 key
 - Temperature：0 到 1
 

@@ -256,6 +256,7 @@
 - 使用 `financial_agent/tools/settings_panel.py` 渲染设置面板
 - 支持 `模型设置`、`查看模型配置`、`小米配置`、`测试模型连接`
 - Chainlit 首页提供 starter cards 和快捷按钮，侧边栏 Chat Settings 支持用户配置 provider、model、base_url、API key 和 temperature
+- Model 下拉选项跟随 provider 动态刷新，Base URL 也会跟随 provider 自动切换默认值
 - 用户 API key 只保存在当前 Python 进程的会话内存中，不写入 `.env`、报告或记忆库
 - 使用 `contextvars` 为每次请求注入会话级 LLMConfig，避免多用户之间串模型配置
 - 内置 provider：OpenAI、DeepSeek、MiniMax、Xiaomi MiMo

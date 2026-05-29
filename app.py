@@ -73,6 +73,34 @@ PROVIDER_ITEMS = {
     "Xiaomi MiMo": "xiaomi",
 }
 
+PROVIDER_MODEL_ITEMS = {
+    "openai": {
+        "GPT-5.1": "gpt-5.1",
+        "GPT-5": "gpt-5",
+        "GPT-5 mini": "gpt-5-mini",
+        "GPT-5 nano": "gpt-5-nano",
+        "GPT-4.1": "gpt-4.1",
+        "GPT-4.1 mini": "gpt-4.1-mini",
+        "GPT-4o mini": "gpt-4o-mini",
+    },
+    "deepseek": {
+        "DeepSeek V4 Flash": "deepseek-v4-flash",
+        "DeepSeek V4 Pro": "deepseek-v4-pro",
+    },
+    "minimax": {
+        "MiniMax M2.7": "MiniMax-M2.7",
+        "MiniMax M2.7 highspeed": "MiniMax-M2.7-highspeed",
+        "MiniMax M2.5": "MiniMax-M2.5",
+        "MiniMax M2.5 highspeed": "MiniMax-M2.5-highspeed",
+        "MiniMax M2-her": "M2-her",
+    },
+    "xiaomi": {
+        "MiMo V2.5 Pro": "mimo-v2.5-pro",
+        "MiMo V2.5": "mimo-v2.5",
+        "MiMo V2 Flash": "mimo-v2-flash",
+    },
+}
+
 SESSION_LLM_CONFIGS: dict[str, LLMConfig] = {}
 
 QUICK_ACTION_DEFS = [
@@ -148,6 +176,17 @@ def _provider_defaults(provider: str) -> dict:
     return PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["openai"])
 
 
+def _provider_model_items(provider: str, current_model: str | None = None) -> dict[str, str]:
+    items = dict(PROVIDER_MODEL_ITEMS.get(provider, PROVIDER_MODEL_ITEMS["openai"]))
+    if current_model and current_model not in items.values():
+        items[f"当前自定义：{current_model}"] = current_model
+    return items
+
+
+def _provider_model_values(provider: str) -> set[str]:
+    return set(PROVIDER_MODEL_ITEMS.get(provider, {}).values())
+
+
 def _build_session_llm_config(updated: dict) -> LLMConfig:
     previous = _session_llm_config()
     fallback = LLMConfig.from_settings()
@@ -156,10 +195,18 @@ def _build_session_llm_config(updated: dict) -> LLMConfig:
     defaults = _provider_defaults(provider)
 
     previous_effective = previous or fallback
-    raw_model = str(updated.get("llm_model") or "").strip()
-    if not raw_model:
+    selected_model = str(updated.get("llm_model") or "").strip()
+    custom_model = str(updated.get("llm_custom_model") or "").strip()
+    raw_model = custom_model or selected_model
+    provider_model_values = _provider_model_values(provider)
+    previous_model_values = _provider_model_values(previous_effective.llm_provider)
+    if custom_model:
+        model = custom_model
+    elif not raw_model:
         model = str(defaults["model"])
-    elif previous_effective.llm_provider != provider and raw_model == previous_effective.llm_model:
+    elif previous_effective.llm_provider != provider and raw_model not in provider_model_values:
+        model = str(defaults["model"])
+    elif previous_effective.llm_provider != provider and raw_model in previous_model_values:
         model = str(defaults["model"])
     else:
         model = raw_model
@@ -231,19 +278,26 @@ async def _send_settings_widgets() -> None:
                 initial_value=provider,
                 description="选择本会话使用的 OpenAI-compatible provider。",
             ),
-            TextInput(
+            Select(
                 id="llm_model",
                 label="模型",
-                initial=config.llm_model,
-                placeholder=str(provider_default["model"]),
-                description="可以填写该 provider 支持的任意模型名。",
+                items=_provider_model_items(provider, config.llm_model),
+                initial_value=config.llm_model,
+                description="模型选项会随 Provider 改变；切换 Provider 后保存一次会自动刷新。",
+            ),
+            TextInput(
+                id="llm_custom_model",
+                label="自定义模型名（可选）",
+                initial="",
+                placeholder="填写后覆盖上方模型选择",
+                description="如果 provider 新增模型但下拉中还没有，可以临时手动填写。",
             ),
             TextInput(
                 id="llm_base_url",
-                label="Base URL",
+                label="Base URL（随 Provider 自动刷新）",
                 initial=config.llm_base_url or "",
                 placeholder=str(provider_default.get("base_url") or "OpenAI 官方接口可留空"),
-                description="OpenAI 官方接口可留空；其他 OpenAI-compatible provider 通常需要填写。",
+                description="切换 Provider 后保存一次会刷新为对应默认 Base URL；也可以手动覆盖。",
             ),
             TextInput(
                 id="llm_api_key",
