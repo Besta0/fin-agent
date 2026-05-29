@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from financial_agent.llm import get_chat_model
-from financial_agent.settings import PROVIDER_DEFAULTS, settings
+from financial_agent.llm import LLMConfig, get_chat_model, get_effective_llm_config
+from financial_agent.settings import PROVIDER_DEFAULTS
 
 
 SETTINGS_KEYWORDS = [
@@ -80,11 +80,12 @@ def _provider_label(provider: str) -> str:
 
 
 async def test_llm_connection(timeout_seconds: int = 20) -> dict[str, Any]:
-    if not settings.llm_api_key:
+    config = get_effective_llm_config()
+    if not config.llm_api_key:
         return {
             "ok": False,
             "status": "not_configured",
-            "message": "未配置 API Key。请先在 .env 中配置当前 provider 的 key。",
+            "message": "未配置 API Key。请先在 UI 设置面板或 .env 中配置当前 provider 的 key。",
         }
 
     model = get_chat_model(temperature=0)
@@ -156,38 +157,40 @@ def _templates_section() -> str:
     return "\n\n".join(blocks)
 
 
-def _current_settings_section() -> str:
-    provider = settings.llm_provider
+def _current_settings_section(config: LLMConfig) -> str:
+    provider = config.llm_provider
     defaults = PROVIDER_DEFAULTS.get(provider)
     known_label = "内置 provider" if defaults else "自定义 OpenAI-compatible provider"
-    key_source = settings.llm_api_key_source or "N/A"
+    key_source = config.llm_api_key_source or "N/A"
     default_model = defaults.get("model") if defaults else "N/A"
     default_base_url = defaults.get("base_url") if defaults else "N/A"
     key_envs = ", ".join(defaults.get("api_key_envs", [])) if defaults else "LLM_API_KEY"
     model_envs = ", ".join(["LLM_MODEL", *(defaults.get("model_envs", []) if defaults else [])])
     base_url_envs = ", ".join(["LLM_BASE_URL", *(defaults.get("base_url_envs", []) if defaults else [])])
     notes: list[str] = []
-    if defaults and settings.llm_model != default_model:
+    if defaults and config.llm_model != default_model:
         notes.append(f"当前 model 与 {_provider_label(provider)} 默认值 `{default_model}` 不同。")
-    if defaults and (settings.llm_base_url or "") != (default_base_url or ""):
+    if defaults and (config.llm_base_url or "") != (default_base_url or ""):
         notes.append(f"当前 base_url 与默认值 `{default_base_url or 'N/A'}` 不同。")
+    if key_source == "UI Session":
+        notes.append("当前正在使用 UI 会话级配置；不会写入 `.env`。")
     notes_text = "\n".join(f"- {note}" for note in notes) if notes else "- 暂无异常提示。"
     return f"""## 当前模型配置
 
 - Provider：**{_provider_label(provider)}**
 - Provider 类型：**{known_label}**
-- Model：**{_display(settings.llm_model)}**
-- Base URL：`{_display(settings.llm_base_url)}`
-- API Key：**{_mask_api_key(settings.llm_api_key)}**
+- Model：**{_display(config.llm_model)}**
+- Base URL：`{_display(config.llm_base_url)}`
+- API Key：**{_mask_api_key(config.llm_api_key)}**
 - Key 来源：`{key_source}`
 - 推荐 Key 环境变量：`{key_envs}`
 - 推荐 Model 环境变量：`{model_envs}`
 - 推荐 Base URL 环境变量：`{base_url_envs}`
 - Provider 默认模型：`{_display(default_model)}`
 - Provider 默认 Base URL：`{_display(default_base_url)}`
-- Temperature：**{settings.llm_temperature}**
-- DeepSeek Thinking：**{settings.deepseek_thinking}**
-- MiniMax Reasoning Split：**{settings.minimax_reasoning_split}**
+- Temperature：**{config.llm_temperature}**
+- DeepSeek Thinking：**{config.deepseek_thinking}**
+- MiniMax Reasoning Split：**{config.minimax_reasoning_split}**
 
 配置诊断：
 {notes_text}"""
@@ -208,13 +211,14 @@ def _connection_result_section(result: dict[str, Any] | None) -> str:
 
 
 async def format_settings_response(test_connection: bool = False) -> str:
+    config = get_effective_llm_config()
     result = await test_llm_connection() if test_connection else None
     return "\n\n".join(
         [
             "# 模型设置",
-            _current_settings_section(),
+            _current_settings_section(config),
             _connection_result_section(result),
-            "## 安全说明\n\n- 页面不会展示完整 API Key。\n- 当前版本只读取配置和测试连接，不会从 UI 写入 `.env`。\n- 同一时间建议只启用一个 provider。",
+            "## 安全说明\n\n- 页面不会展示完整 API Key。\n- UI 中填写的 API Key 只保存在当前 Python 进程的会话内存中，不写入 `.env`、报告或记忆库。\n- 刷新或重启服务后，如果没有重新填写，会回退到 `.env` 配置。",
             "## 配置模板",
             _templates_section(),
         ]

@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import chainlit as cl
-from chainlit.input_widget import Select, TextInput
+from chainlit.input_widget import Select, Slider, TextInput
 
 from financial_agent.graph.workflow import build_research_graph
 from financial_agent.help import HELP_MESSAGE, is_help_intent
+from financial_agent.llm import (
+    LLMConfig,
+    reset_runtime_llm_config,
+    set_runtime_llm_config,
+)
 from financial_agent.tools.charting import build_price_chart
 from financial_agent.tools.dashboard import format_dashboard_response, is_dashboard_intent
 from financial_agent.tools.memory import (
@@ -26,7 +31,7 @@ from financial_agent.tools.settings_panel import (
     is_connection_test_intent,
     is_settings_intent,
 )
-from financial_agent.settings import PROVIDER_DEFAULTS, settings
+from financial_agent.settings import PROVIDER_DEFAULTS
 from financial_agent.tools.watchlist import (
     format_watchlist_detail_response,
     format_watchlist_response,
@@ -60,6 +65,15 @@ PROVIDER_LABELS = {
     "xiaomi": "Xiaomi MiMo",
     "mimo": "Xiaomi MiMo",
 }
+
+PROVIDER_ITEMS = {
+    "OpenAI": "openai",
+    "DeepSeek": "deepseek",
+    "MiniMax": "minimax",
+    "Xiaomi MiMo": "xiaomi",
+}
+
+SESSION_LLM_CONFIGS: dict[str, LLMConfig] = {}
 
 QUICK_ACTION_DEFS = [
     (
@@ -114,42 +128,142 @@ def _quick_actions() -> list[cl.Action]:
     ]
 
 
+def _current_session_key() -> str:
+    try:
+        session_id = cl.user_session.get("id")
+    except Exception:
+        session_id = None
+    return str(session_id or "chainlit")
+
+
+def _session_llm_config() -> LLMConfig | None:
+    return SESSION_LLM_CONFIGS.get(_current_session_key())
+
+
+def _effective_llm_config_for_ui() -> LLMConfig:
+    return _session_llm_config() or LLMConfig.from_settings()
+
+
+def _provider_defaults(provider: str) -> dict:
+    return PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["openai"])
+
+
+def _build_session_llm_config(updated: dict) -> LLMConfig:
+    previous = _session_llm_config()
+    fallback = LLMConfig.from_settings()
+    provider = str(updated.get("llm_provider") or fallback.llm_provider).strip().lower()
+    provider = provider or "openai"
+    defaults = _provider_defaults(provider)
+
+    previous_effective = previous or fallback
+    raw_model = str(updated.get("llm_model") or "").strip()
+    if not raw_model:
+        model = str(defaults["model"])
+    elif previous_effective.llm_provider != provider and raw_model == previous_effective.llm_model:
+        model = str(defaults["model"])
+    else:
+        model = raw_model
+
+    base_url_input = str(updated.get("llm_base_url") or "").strip()
+    if not base_url_input:
+        base_url = defaults.get("base_url")
+    elif previous_effective.llm_provider != provider and base_url_input == (previous_effective.llm_base_url or ""):
+        base_url = defaults.get("base_url")
+    else:
+        base_url = base_url_input
+
+    api_key_input = str(updated.get("llm_api_key") or "").strip()
+    if api_key_input:
+        api_key = api_key_input
+        api_key_source = "UI Session"
+    elif previous and previous.llm_provider == provider and previous.llm_api_key_source == "UI Session":
+        api_key = previous.llm_api_key
+        api_key_source = previous.llm_api_key_source
+    elif provider == fallback.llm_provider:
+        api_key = fallback.llm_api_key
+        api_key_source = fallback.llm_api_key_source
+    else:
+        api_key = None
+        api_key_source = None
+
+    try:
+        temperature = float(updated.get("llm_temperature", fallback.llm_temperature))
+    except (TypeError, ValueError):
+        temperature = fallback.llm_temperature
+
+    return LLMConfig(
+        llm_provider=provider,
+        llm_model=model,
+        llm_base_url=base_url,
+        llm_api_key=api_key,
+        llm_api_key_source=api_key_source,
+        llm_temperature=temperature,
+        deepseek_thinking=fallback.deepseek_thinking,
+        deepseek_reasoning_effort=fallback.deepseek_reasoning_effort,
+        minimax_reasoning_split=fallback.minimax_reasoning_split,
+    )
+
+
+def _activate_session_llm_config():
+    return set_runtime_llm_config(_session_llm_config())
+
+
+async def _format_settings_for_session(test_connection: bool = False) -> str:
+    token = _activate_session_llm_config()
+    try:
+        return await format_settings_response(test_connection=test_connection)
+    finally:
+        reset_runtime_llm_config(token)
+
+
 async def _send_settings_widgets() -> None:
-    provider_values = list(PROVIDER_DEFAULTS.keys())
-    provider = settings.llm_provider if settings.llm_provider in provider_values else "openai"
-    initial_index = provider_values.index(provider)
+    config = _effective_llm_config_for_ui()
+    provider_values = list(PROVIDER_ITEMS.values())
+    provider = config.llm_provider if config.llm_provider in provider_values else "openai"
+    provider_default = _provider_defaults(provider)
 
     await cl.ChatSettings(
         [
             Select(
-                id="llm_provider_view",
-                label="当前 Provider（来自 .env，只读）",
-                values=provider_values,
-                initial_index=initial_index,
-                disabled=True,
+                id="llm_provider",
+                label="Provider",
+                items=PROVIDER_ITEMS,
+                initial_value=provider,
+                description="选择本会话使用的 OpenAI-compatible provider。",
             ),
             TextInput(
-                id="llm_provider_label_view",
-                label="Provider 名称",
-                initial=_provider_label(settings.llm_provider),
-                disabled=True,
+                id="llm_model",
+                label="模型",
+                initial=config.llm_model,
+                placeholder=str(provider_default["model"]),
+                description="可以填写该 provider 支持的任意模型名。",
             ),
             TextInput(
-                id="llm_model_view",
-                label="当前模型",
-                initial=settings.llm_model,
-                disabled=True,
-            ),
-            TextInput(
-                id="llm_base_url_view",
+                id="llm_base_url",
                 label="Base URL",
-                initial=settings.llm_base_url or "N/A",
-                disabled=True,
+                initial=config.llm_base_url or "",
+                placeholder=str(provider_default.get("base_url") or "OpenAI 官方接口可留空"),
+                description="OpenAI 官方接口可留空；其他 OpenAI-compatible provider 通常需要填写。",
+            ),
+            TextInput(
+                id="llm_api_key",
+                label="API Key（本会话）",
+                initial="",
+                placeholder=f"留空则保留当前 key；当前：{_mask_api_key(config.llm_api_key)}",
+                description="保存后只在当前服务进程的会话内使用，不写入 .env、报告或记忆库。",
+            ),
+            Slider(
+                id="llm_temperature",
+                label="Temperature",
+                initial=float(config.llm_temperature),
+                min=0,
+                max=1,
+                step=0.1,
             ),
             TextInput(
                 id="llm_key_status_view",
                 label="API Key 状态",
-                initial=f"{_mask_api_key(settings.llm_api_key)}；来源：{settings.llm_api_key_source or 'N/A'}",
+                initial=f"{_mask_api_key(config.llm_api_key)}；来源：{config.llm_api_key_source or 'N/A'}",
                 disabled=True,
             ),
         ]
@@ -436,10 +550,27 @@ async def on_chat_start() -> None:
     await cl.Message(
         content=(
             "欢迎使用 Fin Agent。你可以直接点下面的快捷按钮，"
-            "也可以在左侧/顶部的设置面板查看当前模型配置。\n\n"
+            "也可以在左侧/顶部的设置面板配置自己的 API 和模型。\n\n"
             f"{HELP_MESSAGE}"
         ),
         actions=_quick_actions(),
+    ).send()
+
+
+@cl.on_settings_update
+async def on_settings_update(updated: dict) -> None:
+    config = _build_session_llm_config(updated)
+    SESSION_LLM_CONFIGS[_current_session_key()] = config
+    await _send_settings_widgets()
+    await cl.Message(
+        content=(
+            "模型配置已应用到当前会话。\n\n"
+            f"- Provider：**{_provider_label(config.llm_provider)}**\n"
+            f"- Model：**{config.llm_model}**\n"
+            f"- Base URL：`{config.llm_base_url or 'N/A'}`\n"
+            f"- API Key：**{_mask_api_key(config.llm_api_key)}**\n\n"
+            "现在可以点击 **测试连接**，或直接开始投研分析。"
+        )
     ).send()
 
 
@@ -449,15 +580,15 @@ async def on_quick_action(action: cl.Action) -> None:
     user_id = _current_user_id()
 
     if intent == "settings":
-        await cl.Message(content=await format_settings_response()).send()
+        await cl.Message(content=await _format_settings_for_session()).send()
         return
 
     if intent == "connection_test":
-        await cl.Message(content=await format_settings_response(test_connection=True)).send()
+        await cl.Message(content=await _format_settings_for_session(test_connection=True)).send()
         return
 
     if intent == "xiaomi":
-        await cl.Message(content=await format_settings_response()).send()
+        await cl.Message(content=await _format_settings_for_session()).send()
         return
 
     if intent == "dashboard":
@@ -490,11 +621,11 @@ async def on_message(message: cl.Message) -> None:
         return
 
     if is_connection_test_intent(user_query):
-        await cl.Message(content=await format_settings_response(test_connection=True)).send()
+        await cl.Message(content=await _format_settings_for_session(test_connection=True)).send()
         return
 
     if is_settings_intent(user_query):
-        await cl.Message(content=await format_settings_response()).send()
+        await cl.Message(content=await _format_settings_for_session()).send()
         return
 
     if is_preference_intent(user_query) and not any(
@@ -522,6 +653,7 @@ async def on_message(message: cl.Message) -> None:
 
     await cl.Message(content="收到，我先判断问题类型和标的。").send()
 
+    token = _activate_session_llm_config()
     try:
         async for event in graph.astream(
             {
@@ -543,6 +675,8 @@ async def on_message(message: cl.Message) -> None:
     except Exception as exc:
         await cl.Message(content=f"运行 Agent 流程时出错：`{exc}`").send()
         return
+    finally:
+        reset_runtime_llm_config(token)
 
     if latest_state.get("direct_response"):
         return

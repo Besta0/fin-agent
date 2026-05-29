@@ -334,7 +334,9 @@ dashboard
 - 隐藏完整 API key，只显示是否已配置和末尾片段
 - 支持“测试模型连接”，发起一次最小 LLM 请求验证配置
 - 提供 OpenAI、DeepSeek、MiniMax、小米 MiMo 配置模板
-- Chainlit 首页提供 starter cards 和快捷按钮；侧边栏 Chat Settings 只读展示当前模型配置
+- Chainlit 首页提供 starter cards 和快捷按钮
+- 侧边栏 Chat Settings 支持用户配置自己的 provider、model、base_url、API key 和 temperature
+- UI 配置只对当前会话生效，不写入 `.env`、报告或记忆库；刷新或重启后回退到服务端配置
 
 触发方式：
 
@@ -351,6 +353,14 @@ Chainlit UI 中可以直接点击：
 - 测试连接
 - 小米配置
 - 投研工作台
+
+Chainlit 侧边栏可以直接配置：
+
+- Provider：OpenAI、DeepSeek、MiniMax、Xiaomi MiMo
+- 模型：填写该 provider 支持的模型名
+- Base URL：OpenAI 官方接口可留空，兼容接口填写 provider base URL
+- API Key：留空则继续使用当前 key；填写后本会话使用用户自己的 key
+- Temperature：0 到 1
 
 ### Report Agent
 

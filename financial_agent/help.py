@@ -71,7 +71,7 @@ Portfolio Agent 会判断这个标的是“核心跟踪”“高优先级”“�
 你可以输入“打开最近报告”“打开 NVDA 报告”或“报告列表”，我会读取本地 Markdown 报告并展示结论、历史记忆参考、质量检查和下一步动作。
 
 16. 查看模型设置
-你可以输入“模型设置”或“测试模型连接”，我会展示当前 provider、model、base_url、API key 是否配置，并提供 OpenAI、DeepSeek、MiniMax、小米 MiMo 配置模板。
+你可以输入“模型设置”或“测试模型连接”，也可以在 Chainlit 侧边栏配置自己的 provider、model、base_url、API key 和 temperature；UI 配置只对当前会话生效。
 
 17. 生成中文投研报告
 最后我会生成一份结构化中文报告，并由 Verifier Agent 做质量检查。
