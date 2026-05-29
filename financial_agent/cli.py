@@ -14,6 +14,12 @@ from financial_agent.tools.memory import (
     is_semantic_memory_intent,
     update_preferences_from_query,
 )
+from financial_agent.tools.report_browser import (
+    format_report_browser_response,
+    format_report_list_response,
+    is_report_browser_intent,
+    is_report_list_intent,
+)
 from financial_agent.tools.watchlist import (
     format_watchlist_detail_response,
     format_watchlist_response,
@@ -40,6 +46,14 @@ async def main() -> int:
 
     if is_dashboard_intent(query):
         print(format_dashboard_response(user_id))
+        return 0
+
+    if is_report_list_intent(query):
+        print(format_report_list_response(user_id))
+        return 0
+
+    if is_report_browser_intent(query):
+        print(format_report_browser_response(query, user_id=user_id))
         return 0
 
     if is_preference_intent(query) and not any(

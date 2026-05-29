@@ -304,6 +304,26 @@ dashboard
 仪表盘
 ```
 
+### Report Browser
+
+文件：`financial_agent/tools/report_browser.py`
+
+职责：
+
+- 在 Chainlit 和 CLI 中打开本地 Markdown 报告
+- 支持“打开最近报告”“打开 NVDA 报告”“报告列表”
+- 自动提取评级、置信度、分析周期、质检状态、正文目录、投资结论、历史记忆参考、质量检查和资料线索
+- 优先展示质检版报告，让用户能从工作台进入报告阅读和复盘
+
+触发方式：
+
+```text
+打开最近报告
+打开 NVDA 报告
+报告列表
+查看最近报告
+```
+
 ### Report Agent
 
 文件：`financial_agent/agents/report_agent.py`
@@ -517,6 +537,7 @@ History: append JSONL record
 │   │   ├── market_data.py
 │   │   ├── memory.py
 │   │   ├── news.py
+│   │   ├── report_browser.py
 │   │   ├── vector_memory.py
 │   │   └── watchlist.py
 │   ├── cli.py
@@ -609,6 +630,8 @@ python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 记住我偏好短线，只看科技股
 以前分析过 NVDA 吗
 投研工作台
+打开最近报告
+报告列表
 查看观察池
 观察池里优先级最高的是谁
 为什么 NVDA 是核心跟踪
@@ -622,6 +645,7 @@ python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 - 中文自然语言输入
 - Help Intent：用户问“你能做什么 / 怎么用 / 帮助”时直接返回功能说明
 - Dashboard Intent：用户问“投研工作台 / dashboard / 仪表盘”时返回观察池、记忆库和最近报告总览
+- Report Browser Intent：用户问“打开最近报告 / 打开 NVDA 报告 / 报告列表”时返回报告阅读页或报告列表
 - Watchlist Intent：用户问“查看观察池 / 我的 watchlist / 优先级最高”时直接返回观察池表格
 - Watchlist Detail Intent：用户问“为什么某个 ticker 是核心跟踪 / 观察池详情”时返回该标的跟踪理由
 - 早停路由：无法识别 ticker 或问题不是股票投研时，不启动后续分析 Agent

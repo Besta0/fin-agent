@@ -9,6 +9,7 @@ from financial_agent.tools.memory import (
     user_reports_dir,
     user_semantic_memory_path,
 )
+from financial_agent.tools.report_browser import list_reports
 from financial_agent.tools.vector_memory import (
     count_vector_memories,
     recent_vector_memories,
@@ -56,32 +57,6 @@ def _truncate(text: Any, limit: int = 42) -> str:
     if len(value) <= limit:
         return value or "暂无"
     return f"{value[:limit - 1]}..."
-
-
-def _recent_reports(user_id: str | None = None, limit: int = 5) -> list[dict[str, str]]:
-    reports_dir = user_reports_dir(user_id)
-    if not reports_dir.exists():
-        return []
-
-    files = sorted(
-        reports_dir.glob("*.md"),
-        key=lambda path: path.stat().st_mtime,
-        reverse=True,
-    )
-    reports: list[dict[str, str]] = []
-    for path in files[:limit]:
-        stem = path.stem
-        ticker = stem.split("_", 1)[0] if stem else "N/A"
-        kind = "质检版" if "_verified_" in stem else "初稿"
-        reports.append(
-            {
-                "ticker": ticker,
-                "kind": kind,
-                "updated_at": datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds"),
-                "path": str(path),
-            }
-        )
-    return reports
 
 
 def _watchlist_section(user_id: str | None = None, limit: int = 8) -> str:
@@ -160,7 +135,7 @@ def _memory_section(user_id: str | None = None, limit: int = 5) -> str:
 
 
 def _reports_section(user_id: str | None = None, limit: int = 5) -> str:
-    reports = _recent_reports(user_id, limit=limit)
+    reports = list_reports(user_id, limit=limit)
     lines = [
         "## 最近报告",
         "",
@@ -173,8 +148,8 @@ def _reports_section(user_id: str | None = None, limit: int = 5) -> str:
 
     lines.extend(
         [
-            "| 时间 | Ticker | 类型 | 路径 |",
-            "|---|---|---|---|",
+            "| 时间 | Ticker | 类型 | 打开方式 | 路径 |",
+            "|---|---|---|---|---|",
         ]
     )
     for report in reports:
@@ -183,6 +158,7 @@ def _reports_section(user_id: str | None = None, limit: int = 5) -> str:
             f"{report['updated_at']} | "
             f"{report['ticker']} | "
             f"{report['kind']} | "
+            f"`打开 {report['ticker']} 报告` | "
             f"`{report['path']}` |"
         )
     return "\n".join(lines)
@@ -196,6 +172,8 @@ def _next_actions_section(user_id: str | None = None) -> str:
 可复制到输入框：
 
 - `帮我重新分析 {ticker}，重点看估值压力和观点变化`
+- `打开 {ticker} 报告`
+- `打开最近报告`
 - `为什么 {ticker} 是核心跟踪`
 - `以前分析过 {ticker} 吗`
 - `查看观察池`

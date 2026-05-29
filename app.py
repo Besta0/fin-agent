@@ -14,6 +14,12 @@ from financial_agent.tools.memory import (
     safe_user_id,
     update_preferences_from_query,
 )
+from financial_agent.tools.report_browser import (
+    format_report_browser_response,
+    format_report_list_response,
+    is_report_browser_intent,
+    is_report_list_intent,
+)
 from financial_agent.tools.watchlist import (
     format_watchlist_detail_response,
     format_watchlist_response,
@@ -303,6 +309,14 @@ async def on_message(message: cl.Message) -> None:
 
     if is_dashboard_intent(user_query):
         await cl.Message(content=format_dashboard_response(user_id)).send()
+        return
+
+    if is_report_list_intent(user_query):
+        await cl.Message(content=format_report_list_response(user_id)).send()
+        return
+
+    if is_report_browser_intent(user_query):
+        await cl.Message(content=format_report_browser_response(user_query, user_id=user_id)).send()
         return
 
     if is_preference_intent(user_query) and not any(

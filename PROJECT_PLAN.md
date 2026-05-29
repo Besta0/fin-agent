@@ -226,6 +226,22 @@
 - 展示观察池 Top 标的、SQLite 向量记忆数量、JSONL 语义备份数量、最近向量记忆和最近报告
 - Chainlit 和 CLI 共用同一套 dashboard 渲染逻辑
 
+### Report Browser
+
+职责：
+
+- 把本地 Markdown 报告变成可直接阅读的报告详情页
+- 支持从工作台进入最近报告或某个 ticker 的最新报告
+- 让用户能快速看到结论、历史记忆引用、质量检查和下一步动作
+
+当前实现：
+
+- 使用 `financial_agent/tools/report_browser.py` 读取 `outputs/users/{user_id}/reports/*.md`
+- 支持 `打开最近报告`、`打开 NVDA 报告`、`报告列表`
+- 优先打开最新质检版报告
+- 自动提取评级、置信度、分析周期、质检状态、正文目录、投资结论、历史记忆参考、质量检查和资料线索
+- Chainlit 和 CLI 共用同一套 report browser 渲染逻辑
+
 ### Report Agent
 
 职责：
@@ -277,6 +293,7 @@ Chainlit UI
 Intent Router
   ├─ Help Intent → 能力说明和示例问题
   ├─ Dashboard Intent → 投研工作台
+  ├─ Report Browser Intent → 报告详情 / 报告列表
   ├─ Watchlist Intent → 观察池表格
   ├─ Watchlist Detail Intent → 单个标的跟踪理由
   ↓
