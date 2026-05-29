@@ -17,6 +17,7 @@ from financial_agent.tools.memory import (
     format_semantic_memory_response,
     is_preference_intent,
     is_semantic_memory_intent,
+    load_semantic_memories,
     safe_user_id,
     update_preferences_from_query,
 )
@@ -25,6 +26,7 @@ from financial_agent.tools.report_browser import (
     format_report_list_response,
     is_report_browser_intent,
     is_report_list_intent,
+    list_reports,
 )
 from financial_agent.tools.settings_panel import (
     format_settings_response,
@@ -32,11 +34,13 @@ from financial_agent.tools.settings_panel import (
     is_settings_intent,
 )
 from financial_agent.settings import PROVIDER_DEFAULTS
+from financial_agent.tools.vector_memory import count_vector_memories
 from financial_agent.tools.watchlist import (
     format_watchlist_detail_response,
     format_watchlist_response,
     is_watchlist_detail_intent,
     is_watchlist_intent,
+    load_watchlist,
     watchlist_limit_from_query,
 )
 
@@ -103,11 +107,27 @@ PROVIDER_MODEL_ITEMS = {
 
 SESSION_LLM_CONFIGS: dict[str, LLMConfig] = {}
 
+HOME_KEYWORDS = [
+    "首页",
+    "主页",
+    "home",
+    "产品首页",
+    "回到首页",
+    "开始",
+    "start",
+]
+
 QUICK_ACTION_DEFS = [
+    (
+        "analyze_nvda",
+        "分析 NVDA",
+        "启动一次完整多 Agent 投研流程",
+        "search",
+    ),
     (
         "settings",
         "模型设置",
-        "查看当前 provider、model、base_url 和 API key 状态",
+        "配置 provider、model、base_url 和 API key",
         "settings",
     ),
     (
@@ -117,16 +137,22 @@ QUICK_ACTION_DEFS = [
         "plug",
     ),
     (
-        "xiaomi",
-        "小米配置",
-        "查看 Xiaomi MiMo 的配置模板",
-        "cpu",
+        "reports",
+        "最近报告",
+        "打开本地报告列表",
+        "file-text",
     ),
     (
         "dashboard",
         "投研工作台",
         "打开观察池、记忆库和最近报告总览",
         "layout-dashboard",
+    ),
+    (
+        "help",
+        "能力指南",
+        "查看完整功能说明和示例问题",
+        "circle-help",
     ),
 ]
 
@@ -154,6 +180,14 @@ def _quick_actions() -> list[cl.Action]:
         )
         for intent, label, tooltip, icon in QUICK_ACTION_DEFS
     ]
+
+
+def _is_home_intent(text: str) -> bool:
+    normalized = text.strip().lower()
+    if not normalized:
+        return False
+    compact = "".join(normalized.split())
+    return any(keyword.lower().replace(" ", "") == compact for keyword in HOME_KEYWORDS)
 
 
 def _current_session_key() -> str:
@@ -253,6 +287,60 @@ def _build_session_llm_config(updated: dict) -> LLMConfig:
 
 def _activate_session_llm_config():
     return set_runtime_llm_config(_session_llm_config())
+
+
+def _format_product_home(user_id: str) -> str:
+    config = _effective_llm_config_for_ui()
+    watchlist = load_watchlist(user_id)
+    watchlist_items = watchlist.get("items", [])
+    reports = list_reports(user_id, limit=5)
+    vector_count = count_vector_memories(user_id)
+    semantic_count = len(load_semantic_memories(user_id))
+    key_status = "已配置" if config.llm_api_key else "未配置"
+    key_source = config.llm_api_key_source or "N/A"
+    base_url = config.llm_base_url or "OpenAI 默认"
+    top_ticker = str(watchlist_items[0].get("ticker")) if watchlist_items else "NVDA"
+    latest_report = reports[0]["ticker"] if reports else "暂无"
+
+    return f"""# Fin Agent Research Workspace
+
+**从一句股票问题，到可复盘的多 Agent 投研报告。**
+
+| 当前状态 | 值 |
+|---|---|
+| Provider | **{_provider_label(config.llm_provider)}** |
+| Model | **{config.llm_model}** |
+| Base URL | `{base_url}` |
+| API Key | **{key_status}**（{key_source}） |
+
+## 今日工作台
+
+| 研究资产 | 数量 / 状态 | 快捷动作 |
+|---|---:|---|
+| 观察池标的 | **{len(watchlist_items)}** | `查看观察池` |
+| 最近报告 | **{len(reports)}** | `打开最近报告` |
+| SQLite 记忆 | **{vector_count}** | `以前分析过 {top_ticker} 吗` |
+| 语义备份 | **{semantic_count}** | `检索记忆 {top_ticker}` |
+| 最新报告标的 | **{latest_report}** | `报告列表` |
+
+## 研究流水线
+
+| 阶段 | 输出 |
+|---|---|
+| Coordinator | 识别 ticker、市场、周期和是否需要早停 |
+| Market / Fundamental | 行情、技术指标、基本面和估值 |
+| News & Risk | 新闻线索、链接和主要风险 |
+| Bull / Bear / Committee | 多空论证、投委会评级和置信度 |
+| Portfolio / Report / Verifier | 观察池、中文报告、质量检查和历史记忆 |
+
+## 直接开始
+
+- `帮我分析一下 {top_ticker} 未来一个月走势`
+- `帮我分析一下闪迪今天走势`
+- `打开最近报告`
+- `投研工作台`
+- `模型设置`
+"""
 
 
 async def _format_settings_for_session(test_connection: bool = False) -> str:
@@ -567,141 +655,7 @@ def _brief_update(node_name: str, update: dict) -> str:
     return "节点已完成。"
 
 
-@cl.set_starters
-async def set_starters():
-    return [
-        cl.Starter(
-            label="模型设置",
-            message="模型设置",
-            icon="settings",
-        ),
-        cl.Starter(
-            label="测试模型连接",
-            message="测试模型连接",
-            icon="plug",
-        ),
-        cl.Starter(
-            label="小米 MiMo 配置",
-            message="小米配置",
-            icon="cpu",
-        ),
-        cl.Starter(
-            label="投研工作台",
-            message="投研工作台",
-            icon="layout-dashboard",
-        ),
-        cl.Starter(
-            label="分析英伟达",
-            message="分析一下英伟达最近走势",
-            icon="search",
-        ),
-    ]
-
-
-@cl.on_chat_start
-async def on_chat_start() -> None:
-    await _send_settings_widgets()
-    await cl.Message(
-        content=(
-            "欢迎使用 Fin Agent。你可以直接点下面的快捷按钮，"
-            "也可以在左侧/顶部的设置面板配置自己的 API 和模型。\n\n"
-            f"{HELP_MESSAGE}"
-        ),
-        actions=_quick_actions(),
-    ).send()
-
-
-@cl.on_settings_update
-async def on_settings_update(updated: dict) -> None:
-    config = _build_session_llm_config(updated)
-    SESSION_LLM_CONFIGS[_current_session_key()] = config
-    await _send_settings_widgets()
-    await cl.Message(
-        content=(
-            "模型配置已应用到当前会话。\n\n"
-            f"- Provider：**{_provider_label(config.llm_provider)}**\n"
-            f"- Model：**{config.llm_model}**\n"
-            f"- Base URL：`{config.llm_base_url or 'N/A'}`\n"
-            f"- API Key：**{_mask_api_key(config.llm_api_key)}**\n\n"
-            "现在可以点击 **测试连接**，或直接开始投研分析。"
-        )
-    ).send()
-
-
-@cl.action_callback("quick_action")
-async def on_quick_action(action: cl.Action) -> None:
-    intent = action.payload.get("intent")
-    user_id = _current_user_id()
-
-    if intent == "settings":
-        await cl.Message(content=await _format_settings_for_session()).send()
-        return
-
-    if intent == "connection_test":
-        await cl.Message(content=await _format_settings_for_session(test_connection=True)).send()
-        return
-
-    if intent == "xiaomi":
-        await cl.Message(content=await _format_settings_for_session()).send()
-        return
-
-    if intent == "dashboard":
-        await cl.Message(content=format_dashboard_response(user_id)).send()
-        return
-
-
-@cl.on_message
-async def on_message(message: cl.Message) -> None:
-    user_query = message.content.strip()
-    user_id = _current_user_id()
-    if not user_query:
-        await cl.Message(content="请输入一个股票分析问题，比如：`分析一下 AAPL 最近走势`。").send()
-        return
-
-    if is_help_intent(user_query):
-        await cl.Message(content=HELP_MESSAGE).send()
-        return
-
-    if is_dashboard_intent(user_query):
-        await cl.Message(content=format_dashboard_response(user_id)).send()
-        return
-
-    if is_report_list_intent(user_query):
-        await cl.Message(content=format_report_list_response(user_id)).send()
-        return
-
-    if is_report_browser_intent(user_query):
-        await cl.Message(content=format_report_browser_response(user_query, user_id=user_id)).send()
-        return
-
-    if is_connection_test_intent(user_query):
-        await cl.Message(content=await _format_settings_for_session(test_connection=True)).send()
-        return
-
-    if is_settings_intent(user_query):
-        await cl.Message(content=await _format_settings_for_session()).send()
-        return
-
-    if is_preference_intent(user_query) and not any(
-        keyword in user_query for keyword in ("分析", "走势", "看看", "研究", "评级")
-    ):
-        update_preferences_from_query(user_id, user_query)
-        await cl.Message(content=format_preferences_response(user_id)).send()
-        return
-
-    if is_semantic_memory_intent(user_query):
-        await cl.Message(content=format_semantic_memory_response(user_id, user_query)).send()
-        return
-
-    if is_watchlist_detail_intent(user_query, user_id=user_id):
-        await cl.Message(content=format_watchlist_detail_response(user_query, user_id=user_id)).send()
-        return
-
-    if is_watchlist_intent(user_query):
-        limit = watchlist_limit_from_query(user_query)
-        await cl.Message(content=format_watchlist_response(limit=limit, user_id=user_id)).send()
-        return
-
+async def _run_research_flow(user_query: str, user_id: str) -> None:
     graph = build_research_graph()
     latest_state: dict = {}
 
@@ -749,3 +703,155 @@ async def on_message(message: cl.Message) -> None:
         elements.append(cl.Plotly(name="price_chart", figure=chart, display="inline"))
 
     await cl.Message(content=final_report, elements=elements).send()
+
+
+@cl.set_starters
+async def set_starters():
+    return [
+        cl.Starter(
+            label="分析 NVDA",
+            message="帮我分析一下 NVDA 未来一个月走势",
+            icon="search",
+        ),
+        cl.Starter(
+            label="配置模型",
+            message="模型设置",
+            icon="settings",
+        ),
+        cl.Starter(
+            label="测试连接",
+            message="测试模型连接",
+            icon="plug",
+        ),
+        cl.Starter(
+            label="最近报告",
+            message="打开最近报告",
+            icon="file-text",
+        ),
+        cl.Starter(
+            label="投研工作台",
+            message="投研工作台",
+            icon="layout-dashboard",
+        ),
+        cl.Starter(
+            label="能力指南",
+            message="你能做什么",
+            icon="circle-help",
+        ),
+    ]
+
+
+@cl.on_chat_start
+async def on_chat_start() -> None:
+    user_id = _current_user_id()
+    await _send_settings_widgets()
+    await cl.Message(
+        content=_format_product_home(user_id),
+        actions=_quick_actions(),
+    ).send()
+
+
+@cl.on_settings_update
+async def on_settings_update(updated: dict) -> None:
+    config = _build_session_llm_config(updated)
+    SESSION_LLM_CONFIGS[_current_session_key()] = config
+    await _send_settings_widgets()
+    await cl.Message(
+        content=(
+            "模型配置已应用到当前会话。\n\n"
+            f"- Provider：**{_provider_label(config.llm_provider)}**\n"
+            f"- Model：**{config.llm_model}**\n"
+            f"- Base URL：`{config.llm_base_url or 'N/A'}`\n"
+            f"- API Key：**{_mask_api_key(config.llm_api_key)}**\n\n"
+            "现在可以点击 **测试连接**，或直接开始投研分析。"
+        )
+    ).send()
+
+
+@cl.action_callback("quick_action")
+async def on_quick_action(action: cl.Action) -> None:
+    intent = action.payload.get("intent")
+    user_id = _current_user_id()
+
+    if intent == "analyze_nvda":
+        await _run_research_flow("帮我分析一下 NVDA 未来一个月走势", user_id)
+        return
+
+    if intent == "settings":
+        await cl.Message(content=await _format_settings_for_session()).send()
+        return
+
+    if intent == "connection_test":
+        await cl.Message(content=await _format_settings_for_session(test_connection=True)).send()
+        return
+
+    if intent == "reports":
+        await cl.Message(content=format_report_list_response(user_id)).send()
+        return
+
+    if intent == "dashboard":
+        await cl.Message(content=format_dashboard_response(user_id)).send()
+        return
+
+    if intent == "help":
+        await cl.Message(content=HELP_MESSAGE).send()
+        return
+
+
+@cl.on_message
+async def on_message(message: cl.Message) -> None:
+    user_query = message.content.strip()
+    user_id = _current_user_id()
+    if not user_query:
+        await cl.Message(content="请输入一个股票分析问题，比如：`分析一下 AAPL 最近走势`。").send()
+        return
+
+    if _is_home_intent(user_query):
+        await cl.Message(content=_format_product_home(user_id), actions=_quick_actions()).send()
+        return
+
+    if is_help_intent(user_query):
+        await cl.Message(content=HELP_MESSAGE).send()
+        return
+
+    if is_dashboard_intent(user_query):
+        await cl.Message(content=format_dashboard_response(user_id)).send()
+        return
+
+    if is_report_list_intent(user_query):
+        await cl.Message(content=format_report_list_response(user_id)).send()
+        return
+
+    if is_report_browser_intent(user_query):
+        await cl.Message(content=format_report_browser_response(user_query, user_id=user_id)).send()
+        return
+
+    if is_connection_test_intent(user_query):
+        await cl.Message(content=await _format_settings_for_session(test_connection=True)).send()
+        return
+
+    if is_settings_intent(user_query):
+        await cl.Message(content=await _format_settings_for_session()).send()
+        return
+
+    if is_preference_intent(user_query) and not any(
+        keyword in user_query for keyword in ("分析", "走势", "看看", "研究", "评级")
+    ):
+        update_preferences_from_query(user_id, user_query)
+        await cl.Message(content=format_preferences_response(user_id)).send()
+        return
+
+    if is_semantic_memory_intent(user_query):
+        await cl.Message(content=format_semantic_memory_response(user_id, user_query)).send()
+        return
+
+    if is_watchlist_detail_intent(user_query, user_id=user_id):
+        await cl.Message(content=format_watchlist_detail_response(user_query, user_id=user_id)).send()
+        return
+
+    if is_watchlist_intent(user_query):
+        limit = watchlist_limit_from_query(user_query)
+        await cl.Message(content=format_watchlist_response(limit=limit, user_id=user_id)).send()
+        return
+
+    await _run_research_flow(user_query, user_id)

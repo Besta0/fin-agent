@@ -264,6 +264,21 @@
 - Xiaomi MiMo 默认 `LLM_BASE_URL=https://api.xiaomimimo.com/v1`，默认模型 `mimo-v2.5-pro`
 - Chainlit 和 CLI 共用同一套 settings panel 渲染逻辑
 
+### Product Home
+
+职责：
+
+- 让用户打开应用后先看到产品化首页，而不是长帮助文本
+- 展示当前模型配置、研究资产数量、工作流阶段和可点击动作
+- 提供更像投研 SaaS 的默认视觉体验
+
+当前实现：
+
+- `app.py` 中 `_format_product_home()` 渲染 Home
+- 首页快捷动作支持分析 NVDA、模型设置、测试连接、最近报告、投研工作台和能力指南
+- `public/fin-agent.css` 覆盖 Chainlit 默认样式，优化表格、按钮、输入框和工作台观感
+- `.chainlit/config.toml` 启用 wide layout、light theme 和 custom CSS
+
 ### Report Agent
 
 职责：

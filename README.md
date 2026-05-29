@@ -26,6 +26,17 @@
 - **Charts**: Plotly
 - **Language**: Python
 
+## 产品化 UI
+
+Chainlit 首页现在是一个投研工作台，而不是默认帮助文本：
+
+- Home 展示当前 provider、model、base_url 和 API key 状态
+- 展示观察池、最近报告、SQLite 记忆和语义备份数量
+- 展示多 Agent 研究流水线
+- 提供可点击动作：分析 NVDA、模型设置、测试连接、最近报告、投研工作台、能力指南
+- 侧边栏支持用户按 provider 选择模型、自动刷新 base_url，并配置自己的 API key
+- 自定义样式文件：`public/fin-agent.css`
+
 ## 总体架构
 
 ```text
