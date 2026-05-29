@@ -242,6 +242,24 @@
 - 自动提取评级、置信度、分析周期、质检状态、正文目录、投资结论、历史记忆参考、质量检查和资料线索
 - Chainlit 和 CLI 共用同一套 report browser 渲染逻辑
 
+### Settings Panel
+
+职责：
+
+- 展示当前 LLM provider、model、base_url 和 API key 配置状态
+- 隐藏完整 API key，避免把密钥写进聊天记录
+- 给用户一个自助排查模型连接的入口
+- 提供 OpenAI、DeepSeek、MiniMax、小米 MiMo 配置模板
+
+当前实现：
+
+- 使用 `financial_agent/tools/settings_panel.py` 渲染设置面板
+- 支持 `模型设置`、`查看模型配置`、`小米配置`、`测试模型连接`
+- 内置 provider：OpenAI、DeepSeek、MiniMax、Xiaomi MiMo
+- Xiaomi MiMo 支持 `LLM_PROVIDER=xiaomi` 或 `LLM_PROVIDER=mimo`
+- Xiaomi MiMo 默认 `LLM_BASE_URL=https://api.xiaomimimo.com/v1`，默认模型 `mimo-v2.5-pro`
+- Chainlit 和 CLI 共用同一套 settings panel 渲染逻辑
+
 ### Report Agent
 
 职责：
@@ -252,7 +270,7 @@
 
 当前实现：
 
-- 有 OpenAI API key 时使用 LLM 生成报告
+- 有可用 LLM provider API key 时使用模型生成报告
 - 没有 API key 时使用规则模板兜底
 - 自动保存到 `outputs/reports/`
 
@@ -294,6 +312,7 @@ Intent Router
   ├─ Help Intent → 能力说明和示例问题
   ├─ Dashboard Intent → 投研工作台
   ├─ Report Browser Intent → 报告详情 / 报告列表
+  ├─ Settings Intent → 模型设置 / 连接测试
   ├─ Watchlist Intent → 观察池表格
   ├─ Watchlist Detail Intent → 单个标的跟踪理由
   ↓

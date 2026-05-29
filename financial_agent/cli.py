@@ -20,6 +20,11 @@ from financial_agent.tools.report_browser import (
     is_report_browser_intent,
     is_report_list_intent,
 )
+from financial_agent.tools.settings_panel import (
+    format_settings_response,
+    is_connection_test_intent,
+    is_settings_intent,
+)
 from financial_agent.tools.watchlist import (
     format_watchlist_detail_response,
     format_watchlist_response,
@@ -54,6 +59,14 @@ async def main() -> int:
 
     if is_report_browser_intent(query):
         print(format_report_browser_response(query, user_id=user_id))
+        return 0
+
+    if is_connection_test_intent(query):
+        print(await format_settings_response(test_connection=True))
+        return 0
+
+    if is_settings_intent(query):
+        print(await format_settings_response())
         return 0
 
     if is_preference_intent(query) and not any(

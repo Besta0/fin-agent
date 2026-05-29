@@ -324,6 +324,26 @@ dashboard
 查看最近报告
 ```
 
+### Settings Panel
+
+文件：`financial_agent/tools/settings_panel.py`
+
+职责：
+
+- 在 Chainlit 和 CLI 中展示当前 LLM provider、model、base_url 和 API key 配置状态
+- 隐藏完整 API key，只显示是否已配置和末尾片段
+- 支持“测试模型连接”，发起一次最小 LLM 请求验证配置
+- 提供 OpenAI、DeepSeek、MiniMax、小米 MiMo 配置模板
+
+触发方式：
+
+```text
+模型设置
+查看模型配置
+测试模型连接
+小米配置
+```
+
 ### Report Agent
 
 文件：`financial_agent/agents/report_agent.py`
@@ -538,6 +558,7 @@ History: append JSONL record
 │   │   ├── memory.py
 │   │   ├── news.py
 │   │   ├── report_browser.py
+│   │   ├── settings_panel.py
 │   │   ├── vector_memory.py
 │   │   └── watchlist.py
 │   ├── cli.py
@@ -599,6 +620,31 @@ LLM_BASE_URL=https://api.minimax.io/v1
 MINIMAX_REASONING_SPLIT=false
 ```
 
+### Xiaomi MiMo
+
+```bash
+LLM_PROVIDER=xiaomi
+MIMO_API_KEY=your_mimo_key
+LLM_MODEL=mimo-v2.5-pro
+LLM_BASE_URL=https://api.xiaomimimo.com/v1
+```
+
+也可以使用别名：
+
+```bash
+LLM_PROVIDER=mimo
+XIAOMI_API_KEY=your_mimo_key
+LLM_MODEL=mimo-v2.5-pro
+LLM_BASE_URL=https://api.xiaomimimo.com/v1
+```
+
+配置后可以在 Chainlit 或 CLI 中输入：
+
+```text
+模型设置
+测试模型连接
+```
+
 ## 运行
 
 启动 Chainlit：
@@ -646,6 +692,7 @@ python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 - Help Intent：用户问“你能做什么 / 怎么用 / 帮助”时直接返回功能说明
 - Dashboard Intent：用户问“投研工作台 / dashboard / 仪表盘”时返回观察池、记忆库和最近报告总览
 - Report Browser Intent：用户问“打开最近报告 / 打开 NVDA 报告 / 报告列表”时返回报告阅读页或报告列表
+- Settings Intent：用户问“模型设置 / 测试模型连接 / 小米配置”时返回 provider 配置状态和连接测试结果
 - Watchlist Intent：用户问“查看观察池 / 我的 watchlist / 优先级最高”时直接返回观察池表格
 - Watchlist Detail Intent：用户问“为什么某个 ticker 是核心跟踪 / 观察池详情”时返回该标的跟踪理由
 - 早停路由：无法识别 ticker 或问题不是股票投研时，不启动后续分析 Agent
