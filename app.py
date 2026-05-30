@@ -224,6 +224,39 @@ def _report_actions(ticker: str) -> list[cl.Action]:
     ]
 
 
+def _report_library_actions() -> list[cl.Action]:
+    return [
+        cl.Action(
+            name="report_action",
+            payload={"intent": "open_latest"},
+            label="打开最近",
+            tooltip="进入最近一份报告阅读页",
+            icon="book-open",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "dashboard"},
+            label="投研工作台",
+            tooltip="返回观察池、记忆库和最近报告总览",
+            icon="layout-dashboard",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "settings"},
+            label="模型设置",
+            tooltip="配置 provider、model、base_url 和 API key",
+            icon="settings",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "analyze_nvda"},
+            label="分析 NVDA",
+            tooltip="启动一次完整多 Agent 投研流程",
+            icon="search",
+        ),
+    ]
+
+
 def _is_home_intent(text: str) -> bool:
     normalized = text.strip().lower()
     if not normalized:
@@ -828,7 +861,7 @@ async def on_quick_action(action: cl.Action) -> None:
         return
 
     if intent == "reports":
-        await cl.Message(content=format_report_list_response(user_id)).send()
+        await cl.Message(content=format_report_list_response(user_id), actions=_report_library_actions()).send()
         return
 
     if intent == "dashboard":
@@ -848,6 +881,14 @@ async def on_report_action(action: cl.Action) -> None:
 
     if intent == "reanalyze":
         await _run_research_flow(f"帮我重新分析 {ticker}，重点看估值压力和观点变化", user_id)
+        return
+
+    if intent == "open_latest":
+        report_ticker = resolve_report_ticker("打开最近报告", user_id=user_id)
+        await cl.Message(
+            content=format_report_browser_response("打开最近报告", user_id=user_id),
+            actions=_report_actions(report_ticker),
+        ).send()
         return
 
     if intent == "watchlist":
@@ -876,7 +917,7 @@ async def on_message(message: cl.Message) -> None:
         return
 
     if is_report_list_intent(user_query):
-        await cl.Message(content=format_report_list_response(user_id)).send()
+        await cl.Message(content=format_report_list_response(user_id), actions=_report_library_actions()).send()
         return
 
     if is_report_browser_intent(user_query):

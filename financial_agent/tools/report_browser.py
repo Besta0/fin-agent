@@ -100,7 +100,12 @@ def _extract_ticker(text: str) -> str:
     return ""
 
 
-def list_reports(user_id: str | None = None, ticker: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
+def list_reports(
+    user_id: str | None = None,
+    ticker: str | None = None,
+    limit: int = 20,
+    include_metadata: bool = False,
+) -> list[dict[str, Any]]:
     reports_dir = user_reports_dir(user_id)
     if not reports_dir.exists():
         return []
@@ -120,14 +125,18 @@ def list_reports(user_id: str | None = None, ticker: str | None = None, limit: i
 
     reports: list[dict[str, Any]] = []
     for path in files[: max(0, limit)]:
-        reports.append(
-            {
-                "ticker": path.stem.split("_", 1)[0] if path.stem else "N/A",
-                "kind": "质检版" if "_verified_" in path.stem else "初稿",
-                "updated_at": datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds"),
-                "path": str(path),
-            }
-        )
+        ticker_value = path.stem.split("_", 1)[0] if path.stem else "N/A"
+        kind = "质检版" if "_verified_" in path.stem else "初稿"
+        updated_at = datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds")
+        report = {
+            "ticker": ticker_value,
+            "kind": kind,
+            "updated_at": updated_at,
+            "path": str(path),
+        }
+        if include_metadata:
+            report.update(_report_metadata(path, ticker=ticker_value))
+        reports.append(report)
     return reports
 
 
@@ -405,6 +414,31 @@ def _report_title(markdown: str, fallback: str) -> str:
     return fallback
 
 
+def _report_metadata(path: Path, ticker: str) -> dict[str, str]:
+    try:
+        markdown = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {
+            "title": f"{ticker} 报告",
+            "rating": "N/A",
+            "confidence": "N/A",
+            "period": "N/A",
+            "quality_status": f"读取失败：{exc}",
+            "close": "N/A",
+            "link_count": "0",
+        }
+
+    return {
+        "title": _report_title(markdown, fallback=f"{ticker} 报告"),
+        "rating": _extract_rating(markdown),
+        "confidence": _extract_confidence(markdown),
+        "period": _extract_period(markdown),
+        "quality_status": _extract_quality_status(markdown),
+        "close": _extract_close(markdown),
+        "link_count": str(len(_extract_links(markdown, limit=20))),
+    }
+
+
 def _key_value_block(markdown: str, labels: list[str], max_chars: int = 900) -> str:
     rows: list[str] = []
     for label in labels:
@@ -494,27 +528,62 @@ def resolve_report_ticker(query: str, user_id: str | None = None) -> str:
 
 def format_report_list_response(user_id: str | None = None, limit: int = 10) -> str:
     safe_id = safe_user_id(user_id)
-    reports = list_reports(safe_id, limit=limit)
+    reports = list_reports(safe_id, limit=limit, include_metadata=True)
     if not reports:
-        return f"`{safe_id}` 还没有本地报告。"
+        return f"""# 报告库
+
+`{safe_id}` 还没有本地报告。
+
+## 开始生成
+
+- `帮我分析一下 NVDA 未来一个月走势`
+- `帮我分析一下闪迪今天走势`
+- `投研工作台`
+- `模型设置`"""
+
+    latest = reports[0]
 
     lines = [
-        "# 最近报告",
+        "# 报告库",
         "",
-        f"- 用户：`{safe_id}`",
-        f"- 报告目录：`{user_reports_dir(safe_id)}`",
+        f"> 已保存 **{len(reports)}** 份最近报告，优先展示质检版；复制“打开方式”即可进入报告阅读页。",
         "",
-        "| 时间 | Ticker | 类型 | 打开方式 | 路径 |",
-        "|---|---|---|---|---|",
+        "| 指标 | 值 | 指标 | 值 |",
+        "|---|---:|---|---:|",
+        f"| 用户 | `{safe_id}` | 报告目录 | `{user_reports_dir(safe_id)}` |",
+        f"| 最新标的 | **{latest['ticker']}** | 最新结论 | **{latest.get('rating', 'N/A')} / {latest.get('confidence', 'N/A')}** |",
+        f"| 质检状态 | **{latest.get('quality_status', 'N/A')}** | 打开最新 | `打开最近报告` |",
+        "",
+        "## 最近报告",
+        "",
+        "| 报告 | 结论 | 质量与线索 | 打开 |",
+        "|---|---|---|---|",
     ]
     for report in reports:
         ticker = report["ticker"]
+        title = _clip(str(report.get("title") or f"{ticker} 报告"), max_chars=90).replace("\n", " ")
         lines.append(
             "| "
-            f"{report['updated_at']} | "
-            f"{ticker} | "
-            f"{report['kind']} | "
-            f"`打开 {ticker} 报告` | "
-            f"`{report['path']}` |"
+            f"**{ticker}**<br>{_table_cell(title)}<br>`{report['updated_at']}` | "
+            f"评级 **{_table_cell(report.get('rating', 'N/A'))}**<br>"
+            f"置信度 **{_table_cell(report.get('confidence', 'N/A'))}**<br>"
+            f"周期 `{_table_cell(report.get('period', 'N/A'))}`<br>"
+            f"价格 `{_table_cell(report.get('close', 'N/A'))}` | "
+            f"{_table_cell(report['kind'])}<br>"
+            f"质检 **{_table_cell(report.get('quality_status', 'N/A'))}**<br>"
+            f"链接 `{_table_cell(report.get('link_count', '0'))}` 条 | "
+            f"`打开 {ticker} 报告` |"
         )
+    lines.extend(
+        [
+            "",
+            "## 下一步动作",
+            "",
+            "- `打开最近报告`",
+            f"- `帮我重新分析 {latest['ticker']}，重点看估值压力和观点变化`",
+            f"- `以前分析过 {latest['ticker']} 吗`",
+            "- `投研工作台`",
+            "- `查看观察池`",
+        ]
+    )
     return "\n".join(lines)
