@@ -27,6 +27,7 @@ from financial_agent.tools.report_browser import (
     is_report_browser_intent,
     is_report_list_intent,
     list_reports,
+    resolve_report_ticker,
 )
 from financial_agent.tools.settings_panel import (
     format_settings_response,
@@ -179,6 +180,47 @@ def _quick_actions() -> list[cl.Action]:
             icon=icon,
         )
         for intent, label, tooltip, icon in QUICK_ACTION_DEFS
+    ]
+
+
+def _report_actions(ticker: str) -> list[cl.Action]:
+    safe_ticker = ticker or "NVDA"
+    return [
+        cl.Action(
+            name="report_action",
+            payload={"intent": "reanalyze", "ticker": safe_ticker},
+            label="重新分析",
+            tooltip=f"重新运行 {safe_ticker} 的完整多 Agent 投研流程",
+            icon="refresh-cw",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "reports"},
+            label="报告列表",
+            tooltip="查看最近保存的本地报告",
+            icon="list",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "dashboard"},
+            label="投研工作台",
+            tooltip="返回观察池、记忆库和最近报告总览",
+            icon="layout-dashboard",
+        ),
+        cl.Action(
+            name="report_action",
+            payload={"intent": "watchlist", "ticker": safe_ticker},
+            label="观察池",
+            tooltip="查看当前观察池优先级",
+            icon="star",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "settings"},
+            label="模型设置",
+            tooltip="配置 provider、model、base_url 和 API key",
+            icon="settings",
+        ),
     ]
 
 
@@ -798,6 +840,21 @@ async def on_quick_action(action: cl.Action) -> None:
         return
 
 
+@cl.action_callback("report_action")
+async def on_report_action(action: cl.Action) -> None:
+    intent = action.payload.get("intent")
+    ticker = str(action.payload.get("ticker") or "NVDA").upper()
+    user_id = _current_user_id()
+
+    if intent == "reanalyze":
+        await _run_research_flow(f"帮我重新分析 {ticker}，重点看估值压力和观点变化", user_id)
+        return
+
+    if intent == "watchlist":
+        await cl.Message(content=format_watchlist_response(user_id=user_id)).send()
+        return
+
+
 @cl.on_message
 async def on_message(message: cl.Message) -> None:
     user_query = message.content.strip()
@@ -823,7 +880,11 @@ async def on_message(message: cl.Message) -> None:
         return
 
     if is_report_browser_intent(user_query):
-        await cl.Message(content=format_report_browser_response(user_query, user_id=user_id)).send()
+        report_ticker = resolve_report_ticker(user_query, user_id=user_id)
+        await cl.Message(
+            content=format_report_browser_response(user_query, user_id=user_id),
+            actions=_report_actions(report_ticker),
+        ).send()
         return
 
     if is_connection_test_intent(user_query):
