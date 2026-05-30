@@ -139,9 +139,15 @@ QUICK_ACTION_DEFS = [
     ),
     (
         "reports",
-        "最近报告",
-        "打开本地报告列表",
+        "报告库",
+        "打开本地报告库",
         "file-text",
+    ),
+    (
+        "watchlist",
+        "观察池",
+        "查看研究队列和优先级",
+        "star",
     ),
     (
         "dashboard",
@@ -257,6 +263,73 @@ def _report_library_actions() -> list[cl.Action]:
     ]
 
 
+def _workspace_actions() -> list[cl.Action]:
+    return [
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "reports"},
+            label="报告库",
+            tooltip="查看最近报告和结论摘要",
+            icon="file-text",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "watchlist"},
+            label="观察池",
+            tooltip="查看研究队列和优先级",
+            icon="star",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "settings"},
+            label="模型设置",
+            tooltip="配置 provider、model、base_url 和 API key",
+            icon="settings",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "analyze_nvda"},
+            label="分析 NVDA",
+            tooltip="启动一次完整多 Agent 投研流程",
+            icon="search",
+        ),
+    ]
+
+
+def _watchlist_actions(ticker: str = "NVDA") -> list[cl.Action]:
+    safe_ticker = ticker or "NVDA"
+    return [
+        cl.Action(
+            name="report_action",
+            payload={"intent": "reanalyze", "ticker": safe_ticker},
+            label="重新分析",
+            tooltip=f"重新运行 {safe_ticker} 的完整多 Agent 投研流程",
+            icon="refresh-cw",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "reports"},
+            label="报告库",
+            tooltip="查看最近报告和结论摘要",
+            icon="file-text",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "dashboard"},
+            label="投研工作台",
+            tooltip="返回观察池、记忆库和最近报告总览",
+            icon="layout-dashboard",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "settings"},
+            label="模型设置",
+            tooltip="配置 provider、model、base_url 和 API key",
+            icon="settings",
+        ),
+    ]
+
+
 def _is_home_intent(text: str) -> bool:
     normalized = text.strip().lower()
     if not normalized:
@@ -279,6 +352,13 @@ def _session_llm_config() -> LLMConfig | None:
 
 def _effective_llm_config_for_ui() -> LLMConfig:
     return _session_llm_config() or LLMConfig.from_settings()
+
+
+def _top_watchlist_ticker(user_id: str) -> str:
+    items = load_watchlist(user_id).get("items", [])
+    if items:
+        return str(items[0].get("ticker") or "NVDA")
+    return "NVDA"
 
 
 def _provider_defaults(provider: str) -> dict:
@@ -376,6 +456,13 @@ def _format_product_home(user_id: str) -> str:
     base_url = config.llm_base_url or "OpenAI 默认"
     top_ticker = str(watchlist_items[0].get("ticker")) if watchlist_items else "NVDA"
     latest_report = reports[0]["ticker"] if reports else "暂无"
+    primary_task = (
+        "先配置模型连接"
+        if not config.llm_api_key
+        else f"复盘 {top_ticker} 的最新观点"
+        if reports
+        else f"创建第一份 {top_ticker} 投研报告"
+    )
 
     return f"""# Fin Agent Research Workspace
 
@@ -388,6 +475,15 @@ def _format_product_home(user_id: str) -> str:
 | Base URL | `{base_url}` |
 | API Key | **{key_status}**（{key_source}） |
 
+## 产品导航
+
+| 模块 | 用途 | 进入方式 |
+|---|---|---|
+| 新建研究 | 启动完整多 Agent 分析并生成报告 | `帮我分析一下 {top_ticker} 未来一个月走势` |
+| 报告库 | 查看最近报告、评级、置信度和质检状态 | `报告列表` |
+| 观察池 | 查看研究队列、优先级和跟踪理由 | `查看观察池` |
+| 模型设置 | 配置 provider、model、base_url 和 API key | `模型设置` |
+
 ## 今日工作台
 
 | 研究资产 | 数量 / 状态 | 快捷动作 |
@@ -397,6 +493,12 @@ def _format_product_home(user_id: str) -> str:
 | SQLite 记忆 | **{vector_count}** | `以前分析过 {top_ticker} 吗` |
 | 语义备份 | **{semantic_count}** | `检索记忆 {top_ticker}` |
 | 最新报告标的 | **{latest_report}** | `报告列表` |
+
+## 今日建议
+
+1. **{primary_task}**
+2. 如果刚配置了模型，先运行 `测试模型连接`
+3. 如果已有报告，进入 `报告列表` 查看质检状态和历史结论
 
 ## 研究流水线
 
@@ -799,8 +901,8 @@ async def set_starters():
             icon="plug",
         ),
         cl.Starter(
-            label="最近报告",
-            message="打开最近报告",
+            label="报告库",
+            message="报告列表",
             icon="file-text",
         ),
         cl.Starter(
@@ -864,8 +966,15 @@ async def on_quick_action(action: cl.Action) -> None:
         await cl.Message(content=format_report_list_response(user_id), actions=_report_library_actions()).send()
         return
 
+    if intent == "watchlist":
+        await cl.Message(
+            content=format_watchlist_response(user_id=user_id),
+            actions=_watchlist_actions(_top_watchlist_ticker(user_id)),
+        ).send()
+        return
+
     if intent == "dashboard":
-        await cl.Message(content=format_dashboard_response(user_id)).send()
+        await cl.Message(content=format_dashboard_response(user_id), actions=_workspace_actions()).send()
         return
 
     if intent == "help":
@@ -913,7 +1022,7 @@ async def on_message(message: cl.Message) -> None:
         return
 
     if is_dashboard_intent(user_query):
-        await cl.Message(content=format_dashboard_response(user_id)).send()
+        await cl.Message(content=format_dashboard_response(user_id), actions=_workspace_actions()).send()
         return
 
     if is_report_list_intent(user_query):
@@ -948,12 +1057,18 @@ async def on_message(message: cl.Message) -> None:
         return
 
     if is_watchlist_detail_intent(user_query, user_id=user_id):
-        await cl.Message(content=format_watchlist_detail_response(user_query, user_id=user_id)).send()
+        await cl.Message(
+            content=format_watchlist_detail_response(user_query, user_id=user_id),
+            actions=_watchlist_actions(_top_watchlist_ticker(user_id)),
+        ).send()
         return
 
     if is_watchlist_intent(user_query):
         limit = watchlist_limit_from_query(user_query)
-        await cl.Message(content=format_watchlist_response(limit=limit, user_id=user_id)).send()
+        await cl.Message(
+            content=format_watchlist_response(limit=limit, user_id=user_id),
+            actions=_watchlist_actions(_top_watchlist_ticker(user_id)),
+        ).send()
         return
 
     await _run_research_flow(user_query, user_id)

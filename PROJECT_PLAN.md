@@ -209,7 +209,7 @@
 - 根据投委会评级、置信度、近 1 日 / 近 1 月涨跌幅、风险数量、新闻数量和历史复盘结果计算 `priority_score`
 - 输出 核心跟踪 / 高优先级 / 常规观察 / 低优先级 / 风险警戒
 - 输出 进攻观察 / 趋势跟踪 / 中性跟踪 / 防守观察 / 风险警戒 等组合角色
-- 在 Chainlit 中展示观察池 Top 5
+- 在 Chainlit 中展示产品化研究队列：顶部指标、优先级、投委会结论、近期走势、跟踪理由入口和下一步动作
 
 ### Dashboard
 
@@ -223,7 +223,8 @@
 
 - 使用 `financial_agent/tools/dashboard.py` 渲染 Markdown 工作台
 - 支持 `投研工作台`、`dashboard`、`/dashboard`、`仪表盘` 等 direct intent
-- 展示观察池 Top 标的、SQLite 向量记忆数量、JSONL 语义备份数量、最近向量记忆和最近报告
+- 展示产品导航、观察池 Top 标的、SQLite 向量记忆数量、JSONL 语义备份数量、最近向量记忆和最近报告
+- Chainlit 工作台提供快捷按钮：报告库、观察池、模型设置、分析 NVDA
 - Chainlit 和 CLI 共用同一套 dashboard 渲染逻辑
 
 ### Report Browser
@@ -280,7 +281,8 @@
 当前实现：
 
 - `app.py` 中 `_format_product_home()` 渲染 Home
-- 首页快捷动作支持分析 NVDA、模型设置、测试连接、最近报告、投研工作台和能力指南
+- 首页展示产品导航、研究资产、今日建议和多 Agent 研究流水线
+- 首页快捷动作支持分析 NVDA、模型设置、测试连接、报告库、观察池、投研工作台和能力指南
 - `public/fin-agent.css` 覆盖 Chainlit 默认样式，优化表格、按钮、输入框和工作台观感
 - `.chainlit/config.toml` 启用 wide layout、light theme 和 custom CSS
 

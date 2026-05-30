@@ -73,10 +73,36 @@ def _format_percent(value: Any) -> str:
     return "N/A"
 
 
+def _truncate(text: Any, limit: int = 30) -> str:
+    value = str(text or "").replace("\n", " ").strip()
+    if len(value) <= limit:
+        return value or "暂无"
+    return f"{value[:limit - 1]}..."
+
+
+def _table_cell(value: Any) -> str:
+    return str(value if value is not None else "N/A").replace("|", "/").replace("\n", "<br>")
+
+
 def _format_reasons(reasons: list[Any]) -> str:
     if not reasons:
         return "暂无明确跟踪理由。"
     return "\n".join(f"{idx}. {reason}" for idx, reason in enumerate(reasons[:8], start=1))
+
+
+def _priority_counts(items: list[dict[str, Any]]) -> tuple[int, int, int]:
+    core_count = 0
+    high_count = 0
+    risk_count = 0
+    for item in items:
+        label = str(item.get("priority_label") or "")
+        if label == "核心跟踪":
+            core_count += 1
+        if label in {"核心跟踪", "高优先级"}:
+            high_count += 1
+        if label == "风险警戒":
+            risk_count += 1
+    return core_count, high_count, risk_count
 
 
 def load_watchlist(user_id: str | None = None) -> dict[str, Any]:
@@ -201,45 +227,69 @@ def format_watchlist_response(limit: int = 10, user_id: str | None = None) -> st
     watchlist = load_watchlist(user_id)
     items = watchlist.get("items", [])[:limit]
     if not items:
-        return """当前观察池还是空的。
+        return """# 观察池
 
-你可以先分析一只股票，我会在 Portfolio Agent 阶段自动把它加入观察池。
+当前观察池还是空的。先完成一次投研分析，Portfolio Agent 会自动把标的加入观察池并计算优先级。
 
-示例：
+## 开始生成
 
-- 帮我分析一下 NVDA 未来一个月走势
-- 看看闪迪最近怎么样
-- 帮我分析一下特斯拉是偏多还是偏空"""
+- `帮我分析一下 NVDA 未来一个月走势`
+- `看看闪迪最近怎么样`
+- `帮我分析一下特斯拉是偏多还是偏空`
+- `投研工作台`
+- `模型设置`"""
+
+    all_items = watchlist.get("items", [])
+    top = items[0]
+    core_count, high_count, risk_count = _priority_counts(all_items)
 
     lines = [
-        f"## 当前观察池 Top {len(items)}",
+        "# 观察池",
         "",
-        f"- 更新时间：**{watchlist.get('updated_at') or 'N/A'}**",
-        f"- 本地文件：`{_display_path_for_user(user_id)}`",
+        "> Portfolio Agent 自动维护的研究队列，用来决定哪些标的值得优先复盘。",
         "",
-        "| 排名 | Ticker | 公司 | 优先级 | 分数 | 组合角色 | 评级 | 近1月涨跌幅 | 更新时间 |",
-        "|---:|---|---|---|---:|---|---|---:|---|",
+        "| 指标 | 值 | 指标 | 值 |",
+        "|---|---:|---|---:|",
+        f"| 标的总数 | **{len(all_items)}** | 当前展示 | **Top {len(items)}** |",
+        f"| 核心跟踪 | **{core_count}** | 高优先级以上 | **{high_count}** |",
+        f"| 风险警戒 | **{risk_count}** | 更新时间 | **{watchlist.get('updated_at') or 'N/A'}** |",
+        f"| 当前第一优先级 | **{_table_cell(top.get('ticker'))}** | 本地文件 | `{_display_path_for_user(user_id)}` |",
+        "",
+        "## 研究队列",
+        "",
+        "| 排名 | 标的 | 优先级 | 投委会 | 走势 | 下一步 |",
+        "|---:|---|---|---|---|---|",
     ]
 
     for idx, item in enumerate(items, start=1):
         returns = item.get("returns") or {}
+        ticker = _display(item.get("ticker"))
         lines.append(
             "| "
             f"{idx} | "
-            f"{_display(item.get('ticker'))} | "
-            f"{_display(item.get('company_name'))} | "
-            f"{_display(item.get('priority_label'))} | "
-            f"{_display(item.get('priority_score'))} | "
-            f"{_display(item.get('portfolio_role'))} | "
-            f"{_display(item.get('rating'))} | "
-            f"{_format_percent(returns.get('1m'))} | "
-            f"{_display(item.get('updated_at'))} |"
+            f"**{ticker}**<br>{_table_cell(_truncate(item.get('company_name'), 24))}<br>"
+            f"`{_display(item.get('updated_at'))}` | "
+            f"**{_table_cell(item.get('priority_label'))}**<br>"
+            f"评分 `{_display(item.get('priority_score'))}/100`<br>"
+            f"角色 `{_table_cell(item.get('portfolio_role'))}` | "
+            f"评级 **{_table_cell(item.get('rating'))}**<br>"
+            f"置信度 `{_display(item.get('confidence'))}%` | "
+            f"近1日 `{_format_percent(returns.get('1d'))}`<br>"
+            f"近5日 `{_format_percent(returns.get('5d'))}`<br>"
+            f"近1月 `{_format_percent(returns.get('1m'))}` | "
+            f"`为什么 {ticker} 在观察池`<br>`打开 {ticker} 报告` |"
         )
 
     lines.extend(
         [
             "",
-            "你可以继续输入某个 ticker 做复盘，例如：`帮我分析一下 NVDA 未来一个月走势`。",
+            "## 下一步动作",
+            "",
+            f"- `帮我重新分析 {top.get('ticker')}，重点看估值压力和观点变化`",
+            f"- `为什么 {top.get('ticker')} 在观察池`",
+            f"- `打开 {top.get('ticker')} 报告`",
+            "- `报告列表`",
+            "- `投研工作台`",
         ]
     )
     return "\n".join(lines)
@@ -259,22 +309,25 @@ def format_watchlist_detail_response(text_or_ticker: str, user_id: str | None = 
     reasons = item.get("watch_reasons") or []
     ticker = item.get("ticker") or "N/A"
 
-    return f"""## {ticker} 观察池详情
+    return f"""# {ticker} 观察池详情
 
-- 公司：**{_display(item.get("company_name"))}**
-- 优先级：**{_display(item.get("priority_label"))}**
-- 分数：**{_display(item.get("priority_score"))}/100**
-- 组合角色：**{_display(item.get("portfolio_role"))}**
-- 投委会评级：**{_display(item.get("rating"))}**
-- 置信度：**{_display(item.get("confidence"))}%**
-- 当前价格：**{_display(item.get("price"))}**
-- 近 1 日 / 近 5 日 / 近 1 月涨跌幅：**{_format_percent(returns.get("1d"))} / {_format_percent(returns.get("5d"))} / {_format_percent(returns.get("1m"))}**
-- 近 3 月 / 近 6 月涨跌幅：**{_format_percent(returns.get("3m"))} / {_format_percent(returns.get("6m"))}**
-- 风险数量 / 新闻数量：**{_display(item.get("risk_count"))} / {_display(item.get("news_count"))}**
-- 所属行业：**{_display(item.get("sector"))} / {_display(item.get("industry"))}**
-- 更新时间：**{_display(item.get("updated_at"))}**
+| 指标 | 值 | 指标 | 值 |
+|---|---:|---|---:|
+| 公司 | **{_table_cell(_display(item.get("company_name")))}** | 优先级 | **{_table_cell(_display(item.get("priority_label")))}** |
+| 分数 | **{_display(item.get("priority_score"))}/100** | 组合角色 | **{_table_cell(_display(item.get("portfolio_role")))}** |
+| 投委会评级 | **{_table_cell(_display(item.get("rating")))}** | 置信度 | **{_display(item.get("confidence"))}%** |
+| 当前价格 | **{_display(item.get("price"))}** | 更新时间 | **{_display(item.get("updated_at"))}** |
+| 近 1 日 / 近 5 日 | **{_format_percent(returns.get("1d"))} / {_format_percent(returns.get("5d"))}** | 近 1 月 / 近 3 月 | **{_format_percent(returns.get("1m"))} / {_format_percent(returns.get("3m"))}** |
+| 风险 / 新闻 | **{_display(item.get("risk_count"))} / {_display(item.get("news_count"))}** | 行业 | **{_table_cell(_display(item.get("sector")))} / {_table_cell(_display(item.get("industry")))}** |
 
-跟踪理由：
+## 跟踪理由
+
 {_format_reasons(reasons)}
 
-你可以继续输入：`帮我分析一下 {ticker} 未来一个月走势`，我会重新跑完整投研流程并更新观察池。"""
+## 下一步动作
+
+- `帮我重新分析 {ticker}，重点看估值压力和观点变化`
+- `打开 {ticker} 报告`
+- `以前分析过 {ticker} 吗`
+- `报告列表`
+- `投研工作台`"""

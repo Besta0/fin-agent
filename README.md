@@ -31,9 +31,11 @@
 Chainlit 首页现在是一个投研工作台，而不是默认帮助文本：
 
 - Home 展示当前 provider、model、base_url 和 API key 状态
+- Home 提供产品导航：新建研究、报告库、观察池、模型设置
 - 展示观察池、最近报告、SQLite 记忆和语义备份数量
+- 展示今日建议，告诉用户下一步该配置模型、生成首份报告还是复盘最新标的
 - 展示多 Agent 研究流水线
-- 提供可点击动作：分析 NVDA、模型设置、测试连接、最近报告、投研工作台、能力指南
+- 提供可点击动作：分析 NVDA、模型设置、测试连接、报告库、观察池、投研工作台、能力指南
 - 侧边栏支持用户按 provider 选择模型、自动刷新 base_url，并配置自己的 API key
 - 自定义样式文件：`public/fin-agent.css`
 
@@ -288,7 +290,7 @@ committee_view
 - 根据投委会评级、置信度、近期涨跌幅、风险数量、新闻数量和历史复盘结果计算跟踪优先级
 - 给当前标的打上组合角色，例如进攻观察、趋势跟踪、中性跟踪、防守观察、风险警戒
 - 检查观察池里是否已有同板块标的，提示赛道集中度
-- 输出观察池 Top 5，帮助用户知道下一步优先复盘哪些股票
+- 输出产品化研究队列，包含顶部指标、优先级、投委会结论、近期走势、跟踪理由入口和下一步动作
 
 输出字段：
 
@@ -304,6 +306,7 @@ portfolio
 
 - 在 Chainlit 和 CLI 中提供投研工作台入口
 - 汇总观察池 Top 标的、SQLite 向量记忆、JSONL 语义备份和最近 Markdown 报告
+- 提供产品导航，把新建研究、观察池、报告库、历史记忆、模型设置串成固定入口
 - 输出可复制的下一步动作，例如重新分析、查看观察池详情、检索历史记忆
 
 触发方式：
@@ -701,7 +704,7 @@ python -m financial_agent.cli "帮我分析一下 NVDA 未来一个月走势"
 python -m financial_agent.cli "记住我偏好短线，只看科技股"
 python -m financial_agent.cli "以前分析过 NVDA 吗"
 python -m financial_agent.cli "查看观察池"
-python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
+python -m financial_agent.cli "为什么 NVDA 在观察池"
 ```
 
 示例问题：
@@ -715,7 +718,7 @@ python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 报告列表
 查看观察池
 观察池里优先级最高的是谁
-为什么 NVDA 是核心跟踪
+为什么 NVDA 在观察池
 帮我分析一下英伟达未来一个月走势
 帮我分析一下闪迪今天走势
 帮我看看博通未来一个月是偏多还是偏空
@@ -729,7 +732,7 @@ python -m financial_agent.cli "为什么 NVDA 是核心跟踪"
 - Report Browser Intent：用户问“打开最近报告 / 打开 NVDA 报告 / 打开英伟达报告 / 报告列表”时返回产品化报告阅读页或报告列表
 - Settings Intent：用户问“模型设置 / 测试模型连接 / 小米配置”时返回 provider 配置状态和连接测试结果
 - Watchlist Intent：用户问“查看观察池 / 我的 watchlist / 优先级最高”时直接返回观察池表格
-- Watchlist Detail Intent：用户问“为什么某个 ticker 是核心跟踪 / 观察池详情”时返回该标的跟踪理由
+- Watchlist Detail Intent：用户问“为什么某个 ticker 在观察池 / 观察池详情”时返回该标的跟踪理由
 - 早停路由：无法识别 ticker 或问题不是股票投研时，不启动后续分析 Agent
 - 用户偏好记忆：保存市场、行业、周期、风险和输出风格偏好
 - RAG 语义记忆：按用户用 SQLite + 本地 TF-IDF/Hash Embedding 检索历史报告摘要

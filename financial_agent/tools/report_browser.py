@@ -454,7 +454,7 @@ def _next_actions(ticker: str) -> str:
 
 - `帮我重新分析 {safe_ticker}，重点看估值压力和观点变化`
 - `以前分析过 {safe_ticker} 吗`
-- `为什么 {safe_ticker} 是核心跟踪`
+- `为什么 {safe_ticker} 在观察池`
 - `打开 {safe_ticker} 报告`
 - `报告列表`
 - `投研工作台`

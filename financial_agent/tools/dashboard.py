@@ -59,6 +59,33 @@ def _truncate(text: Any, limit: int = 42) -> str:
     return f"{value[:limit - 1]}..."
 
 
+def _table_cell(value: Any) -> str:
+    return str(value if value is not None else "N/A").replace("|", "/").replace("\n", "<br>")
+
+
+def _top_ticker(user_id: str | None = None) -> str:
+    items = load_watchlist(user_id).get("items", [])
+    if items:
+        return str(items[0].get("ticker") or "NVDA")
+    reports = list_reports(user_id, limit=1)
+    if reports:
+        return str(reports[0].get("ticker") or "NVDA")
+    return "NVDA"
+
+
+def _product_nav_section(user_id: str | None = None) -> str:
+    ticker = _top_ticker(user_id)
+    return f"""## 产品导航
+
+| 模块 | 当前用途 | 进入方式 |
+|---|---|---|
+| 新建研究 | 跑完整投研流水线，生成报告并更新观察池 | `帮我分析一下 {ticker} 未来一个月走势` |
+| 观察池 | 查看研究队列、优先级、组合角色和跟踪理由 | `查看观察池` |
+| 报告库 | 查看最近报告、评级、置信度和质检状态 | `报告列表` |
+| 历史记忆 | 检索过往 thesis、旧报告和观点变化 | `以前分析过 {ticker} 吗` |
+| 模型设置 | 配置 provider、model、base_url 和 API key | `模型设置` |"""
+
+
 def _watchlist_section(user_id: str | None = None, limit: int = 8) -> str:
     watchlist = load_watchlist(user_id)
     items = watchlist.get("items", [])[:limit]
@@ -135,7 +162,7 @@ def _memory_section(user_id: str | None = None, limit: int = 5) -> str:
 
 
 def _reports_section(user_id: str | None = None, limit: int = 5) -> str:
-    reports = list_reports(user_id, limit=limit)
+    reports = list_reports(user_id, limit=limit, include_metadata=True)
     lines = [
         "## 最近报告",
         "",
@@ -148,7 +175,7 @@ def _reports_section(user_id: str | None = None, limit: int = 5) -> str:
 
     lines.extend(
         [
-            "| 时间 | Ticker | 类型 | 打开方式 | 路径 |",
+            "| 时间 | Ticker | 结论 | 质量 | 打开方式 |",
             "|---|---|---|---|---|",
         ]
     )
@@ -157,9 +184,9 @@ def _reports_section(user_id: str | None = None, limit: int = 5) -> str:
             "| "
             f"{report['updated_at']} | "
             f"{report['ticker']} | "
-            f"{report['kind']} | "
-            f"`打开 {report['ticker']} 报告` | "
-            f"`{report['path']}` |"
+            f"**{_table_cell(report.get('rating'))}** / {_table_cell(report.get('confidence'))} | "
+            f"{report['kind']} / {_table_cell(report.get('quality_status'))} | "
+            f"`打开 {report['ticker']} 报告` |"
         )
     return "\n".join(lines)
 
@@ -174,7 +201,7 @@ def _next_actions_section(user_id: str | None = None) -> str:
 - `帮我重新分析 {ticker}，重点看估值压力和观点变化`
 - `打开 {ticker} 报告`
 - `打开最近报告`
-- `为什么 {ticker} 是核心跟踪`
+- `为什么 {ticker} 在观察池`
 - `以前分析过 {ticker} 吗`
 - `查看观察池`
 
@@ -191,6 +218,7 @@ def format_dashboard_response(user_id: str | None = None) -> str:
         [
             "# Fin Agent 投研工作台",
             f"- 用户：`{safe_id}`\n- 生成时间：**{generated_at}**",
+            _product_nav_section(safe_id),
             _watchlist_section(safe_id),
             _memory_section(safe_id),
             _reports_section(safe_id),
