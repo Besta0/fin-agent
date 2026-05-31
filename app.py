@@ -189,9 +189,83 @@ def _quick_actions() -> list[cl.Action]:
     ]
 
 
+def _home_actions(user_id: str) -> list[cl.Action]:
+    config = _effective_llm_config_for_ui()
+    ticker = _top_watchlist_ticker(user_id)
+    if not config.llm_api_key:
+        return [
+            cl.Action(
+                name="quick_action",
+                payload={"intent": "settings"},
+                label="配置模型",
+                tooltip="先配置 provider、model、base_url 和 API key",
+                icon="settings",
+            ),
+            cl.Action(
+                name="quick_action",
+                payload={"intent": "connection_test"},
+                label="测试连接",
+                tooltip="验证当前模型配置是否可用",
+                icon="plug",
+            ),
+            cl.Action(
+                name="quick_action",
+                payload={"intent": "reports"},
+                label="报告库",
+                tooltip="查看已保存的研究报告",
+                icon="file-text",
+            ),
+            cl.Action(
+                name="quick_action",
+                payload={"intent": "watchlist"},
+                label="观察池",
+                tooltip="查看研究队列和优先级",
+                icon="star",
+            ),
+        ]
+
+    return [
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "analyze_top", "ticker": ticker},
+            label=f"分析 {ticker}",
+            tooltip=f"启动 {ticker} 的完整多 Agent 投研流程",
+            icon="search",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "reports"},
+            label="报告库",
+            tooltip="查看最近报告和结论摘要",
+            icon="file-text",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "watchlist"},
+            label="观察池",
+            tooltip="查看研究队列和优先级",
+            icon="star",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "settings"},
+            label="模型设置",
+            tooltip="管理 provider、model、base_url 和 API key",
+            icon="settings",
+        ),
+    ]
+
+
 def _report_actions(ticker: str) -> list[cl.Action]:
     safe_ticker = ticker or "NVDA"
     return [
+        cl.Action(
+            name="report_action",
+            payload={"intent": "open_report", "ticker": safe_ticker},
+            label="打开报告",
+            tooltip=f"进入 {safe_ticker} 的报告阅读页",
+            icon="book-open",
+        ),
         cl.Action(
             name="report_action",
             payload={"intent": "reanalyze", "ticker": safe_ticker},
@@ -202,7 +276,7 @@ def _report_actions(ticker: str) -> list[cl.Action]:
         cl.Action(
             name="quick_action",
             payload={"intent": "reports"},
-            label="报告列表",
+            label="报告库",
             tooltip="查看最近保存的本地报告",
             icon="list",
         ),
@@ -241,10 +315,10 @@ def _report_library_actions() -> list[cl.Action]:
         ),
         cl.Action(
             name="quick_action",
-            payload={"intent": "dashboard"},
-            label="投研工作台",
-            tooltip="返回观察池、记忆库和最近报告总览",
-            icon="layout-dashboard",
+            payload={"intent": "watchlist"},
+            label="观察池",
+            tooltip="查看研究队列和优先级",
+            icon="star",
         ),
         cl.Action(
             name="quick_action",
@@ -265,6 +339,13 @@ def _report_library_actions() -> list[cl.Action]:
 
 def _workspace_actions() -> list[cl.Action]:
     return [
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "home"},
+            label="首页",
+            tooltip="回到产品首页",
+            icon="home",
+        ),
         cl.Action(
             name="quick_action",
             payload={"intent": "reports"},
@@ -326,6 +407,33 @@ def _watchlist_actions(ticker: str = "NVDA") -> list[cl.Action]:
             label="模型设置",
             tooltip="配置 provider、model、base_url 和 API key",
             icon="settings",
+        ),
+    ]
+
+
+def _settings_actions(user_id: str) -> list[cl.Action]:
+    ticker = _top_watchlist_ticker(user_id)
+    return [
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "connection_test"},
+            label="测试连接",
+            tooltip="验证当前模型配置是否可用",
+            icon="plug",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "analyze_top", "ticker": ticker},
+            label=f"分析 {ticker}",
+            tooltip=f"启动 {ticker} 的完整多 Agent 投研流程",
+            icon="search",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "home"},
+            label="首页",
+            tooltip="回到产品首页",
+            icon="home",
         ),
     ]
 
@@ -456,67 +564,62 @@ def _format_product_home(user_id: str) -> str:
     base_url = config.llm_base_url or "OpenAI 默认"
     top_ticker = str(watchlist_items[0].get("ticker")) if watchlist_items else "NVDA"
     latest_report = reports[0]["ticker"] if reports else "暂无"
-    primary_task = (
-        "先配置模型连接"
-        if not config.llm_api_key
-        else f"复盘 {top_ticker} 的最新观点"
-        if reports
-        else f"创建第一份 {top_ticker} 投研报告"
-    )
+    if not config.llm_api_key:
+        primary_task = "配置模型并完成连接测试"
+        primary_reason = "没有可用 API Key 时，报告生成会退回到规则模板。"
+        primary_command = "模型设置"
+    elif not reports:
+        primary_task = f"创建第一份 {top_ticker} 投研报告"
+        primary_reason = "报告库为空，先生成一份报告才能进入复盘和观察池循环。"
+        primary_command = f"帮我分析一下 {top_ticker} 未来一个月走势"
+    else:
+        primary_task = f"复盘 {top_ticker} 的最新观点"
+        primary_reason = "已有报告和记忆，适合继续跟踪观点变化、估值压力和风险兑现。"
+        primary_command = f"帮我重新分析 {top_ticker}，重点看估值压力和观点变化"
 
-    return f"""# Fin Agent Research Workspace
+    readiness = "可开始研究" if config.llm_api_key else "需要配置模型"
+    mode = "复盘模式" if reports else "初始化模式"
 
-**从一句股票问题，到可复盘的多 Agent 投研报告。**
+    return f"""# Fin Agent 投研工作台
 
-| 当前状态 | 值 |
-|---|---|
-| Provider | **{_provider_label(config.llm_provider)}** |
-| Model | **{config.llm_model}** |
-| Base URL | `{base_url}` |
-| API Key | **{key_status}**（{key_source}） |
+> 一个面向中文用户的多 Agent 股票研究工作区：从新建研究、观察池跟踪到报告复盘，形成可追溯的投研循环。
 
-## 产品导航
+## 状态栏
 
-| 模块 | 用途 | 进入方式 |
-|---|---|---|
-| 新建研究 | 启动完整多 Agent 分析并生成报告 | `帮我分析一下 {top_ticker} 未来一个月走势` |
-| 报告库 | 查看最近报告、评级、置信度和质检状态 | `报告列表` |
-| 观察池 | 查看研究队列、优先级和跟踪理由 | `查看观察池` |
-| 模型设置 | 配置 provider、model、base_url 和 API key | `模型设置` |
+| 模型状态 | 当前值 | 研究资产 | 当前值 |
+|---|---|---|---:|
+| 运行状态 | **{readiness}** | 观察池 | **{len(watchlist_items)}** |
+| Provider | **{_provider_label(config.llm_provider)}** | 报告库 | **{len(reports)}** |
+| Model | **{config.llm_model}** | SQLite 记忆 | **{vector_count}** |
+| Base URL | `{base_url}` | 语义备份 | **{semantic_count}** |
+| API Key | **{key_status}**（{key_source}） | 最新报告 | **{latest_report}** |
 
-## 今日工作台
+## 任务中心
 
-| 研究资产 | 数量 / 状态 | 快捷动作 |
-|---|---:|---|
-| 观察池标的 | **{len(watchlist_items)}** | `查看观察池` |
-| 最近报告 | **{len(reports)}** | `打开最近报告` |
-| SQLite 记忆 | **{vector_count}** | `以前分析过 {top_ticker} 吗` |
-| 语义备份 | **{semantic_count}** | `检索记忆 {top_ticker}` |
-| 最新报告标的 | **{latest_report}** | `报告列表` |
+| 优先级 | 建议任务 | 为什么 | 操作 |
+|---:|---|---|---|
+| 1 | **{primary_task}** | {primary_reason} | `{primary_command}` |
+| 2 | 查看报告库质量状态 | 先看结论、置信度、质检问题，再决定是否重跑。 | `报告列表` |
+| 3 | 检查观察池队列 | 用优先级和近期走势决定今天先复盘谁。 | `查看观察池` |
 
-## 今日建议
+## 工作区
 
-1. **{primary_task}**
-2. 如果刚配置了模型，先运行 `测试模型连接`
-3. 如果已有报告，进入 `报告列表` 查看质检状态和历史结论
+| 入口 | 当前状态 | 适合做什么 | 快捷命令 |
+|---|---|---|---|
+| 新建研究 | **{mode}** | 跑完整 Agent 流程，生成新报告并更新观察池 | `帮我分析一下 {top_ticker} 未来一个月走势` |
+| 报告库 | **{len(reports)} 份** | 查看评级、置信度、质检状态和资料链接 | `报告列表` |
+| 观察池 | **{len(watchlist_items)} 个标的** | 查看研究队列、跟踪理由和下一步动作 | `查看观察池` |
+| 记忆库 | **{vector_count + semantic_count} 条记录** | 检索历史 thesis 和观点变化 | `以前分析过 {top_ticker} 吗` |
+| 模型设置 | **{_provider_label(config.llm_provider)}** | 切换 provider、model、base_url 和 API key | `模型设置` |
 
 ## 研究流水线
 
-| 阶段 | 输出 |
+| 阶段 | 用户能看到什么 |
 |---|---|
-| Coordinator | 识别 ticker、市场、周期和是否需要早停 |
-| Market / Fundamental | 行情、技术指标、基本面和估值 |
-| News & Risk | 新闻线索、链接和主要风险 |
-| Bull / Bear / Committee | 多空论证、投委会评级和置信度 |
-| Portfolio / Report / Verifier | 观察池、中文报告、质量检查和历史记忆 |
-
-## 直接开始
-
-- `帮我分析一下 {top_ticker} 未来一个月走势`
-- `帮我分析一下闪迪今天走势`
-- `打开最近报告`
-- `投研工作台`
-- `模型设置`
+| 识别 | ticker、公司名、分析周期、是否需要早停 |
+| 数据 | 行情、技术指标、基本面、新闻链接和风险线索 |
+| 辩论 | Bull / Bear / Committee 的多空观点与最终评级 |
+| 沉淀 | 报告、质检、历史记忆、观察池优先级 |
 """
 
 
@@ -836,7 +939,12 @@ async def _run_research_flow(user_query: str, user_id: str) -> None:
     graph = build_research_graph()
     latest_state: dict = {}
 
-    await cl.Message(content="收到，我先判断问题类型和标的。").send()
+    await cl.Message(
+        content=(
+            "# 研究任务已启动\n\n"
+            "我会依次完成标的识别、行情与基本面、新闻风险、多空观点、投委会结论、报告生成和质量检查。"
+        )
+    ).send()
 
     token = _activate_session_llm_config()
     try:
@@ -879,26 +987,17 @@ async def _run_research_flow(user_query: str, user_id: str) -> None:
     if chart is not None:
         elements.append(cl.Plotly(name="price_chart", figure=chart, display="inline"))
 
-    await cl.Message(content=final_report, elements=elements).send()
+    ticker = str(latest_state.get("ticker") or "NVDA")
+    await cl.Message(content=final_report, elements=elements, actions=_report_actions(ticker)).send()
 
 
 @cl.set_starters
 async def set_starters():
     return [
         cl.Starter(
-            label="分析 NVDA",
+            label="新建研究",
             message="帮我分析一下 NVDA 未来一个月走势",
             icon="search",
-        ),
-        cl.Starter(
-            label="配置模型",
-            message="模型设置",
-            icon="settings",
-        ),
-        cl.Starter(
-            label="测试连接",
-            message="测试模型连接",
-            icon="plug",
         ),
         cl.Starter(
             label="报告库",
@@ -906,9 +1005,19 @@ async def set_starters():
             icon="file-text",
         ),
         cl.Starter(
-            label="投研工作台",
-            message="投研工作台",
-            icon="layout-dashboard",
+            label="观察池",
+            message="查看观察池",
+            icon="star",
+        ),
+        cl.Starter(
+            label="模型设置",
+            message="模型设置",
+            icon="settings",
+        ),
+        cl.Starter(
+            label="测试连接",
+            message="测试模型连接",
+            icon="plug",
         ),
         cl.Starter(
             label="能力指南",
@@ -924,12 +1033,13 @@ async def on_chat_start() -> None:
     await _send_settings_widgets()
     await cl.Message(
         content=_format_product_home(user_id),
-        actions=_quick_actions(),
+        actions=_home_actions(user_id),
     ).send()
 
 
 @cl.on_settings_update
 async def on_settings_update(updated: dict) -> None:
+    user_id = _current_user_id()
     config = _build_session_llm_config(updated)
     SESSION_LLM_CONFIGS[_current_session_key()] = config
     await _send_settings_widgets()
@@ -941,7 +1051,8 @@ async def on_settings_update(updated: dict) -> None:
             f"- Base URL：`{config.llm_base_url or 'N/A'}`\n"
             f"- API Key：**{_mask_api_key(config.llm_api_key)}**\n\n"
             "现在可以点击 **测试连接**，或直接开始投研分析。"
-        )
+        ),
+        actions=_settings_actions(user_id),
     ).send()
 
 
@@ -950,16 +1061,24 @@ async def on_quick_action(action: cl.Action) -> None:
     intent = action.payload.get("intent")
     user_id = _current_user_id()
 
-    if intent == "analyze_nvda":
-        await _run_research_flow("帮我分析一下 NVDA 未来一个月走势", user_id)
+    if intent == "home":
+        await cl.Message(content=_format_product_home(user_id), actions=_home_actions(user_id)).send()
+        return
+
+    if intent in {"analyze_nvda", "analyze_top"}:
+        ticker = str(action.payload.get("ticker") or "NVDA").upper()
+        await _run_research_flow(f"帮我分析一下 {ticker} 未来一个月走势", user_id)
         return
 
     if intent == "settings":
-        await cl.Message(content=await _format_settings_for_session()).send()
+        await cl.Message(content=await _format_settings_for_session(), actions=_settings_actions(user_id)).send()
         return
 
     if intent == "connection_test":
-        await cl.Message(content=await _format_settings_for_session(test_connection=True)).send()
+        await cl.Message(
+            content=await _format_settings_for_session(test_connection=True),
+            actions=_settings_actions(user_id),
+        ).send()
         return
 
     if intent == "reports":
@@ -1000,8 +1119,18 @@ async def on_report_action(action: cl.Action) -> None:
         ).send()
         return
 
+    if intent == "open_report":
+        await cl.Message(
+            content=format_report_browser_response(f"打开 {ticker} 报告", user_id=user_id),
+            actions=_report_actions(ticker),
+        ).send()
+        return
+
     if intent == "watchlist":
-        await cl.Message(content=format_watchlist_response(user_id=user_id)).send()
+        await cl.Message(
+            content=format_watchlist_response(user_id=user_id),
+            actions=_watchlist_actions(_top_watchlist_ticker(user_id)),
+        ).send()
         return
 
 
@@ -1014,7 +1143,7 @@ async def on_message(message: cl.Message) -> None:
         return
 
     if _is_home_intent(user_query):
-        await cl.Message(content=_format_product_home(user_id), actions=_quick_actions()).send()
+        await cl.Message(content=_format_product_home(user_id), actions=_home_actions(user_id)).send()
         return
 
     if is_help_intent(user_query):
@@ -1038,11 +1167,14 @@ async def on_message(message: cl.Message) -> None:
         return
 
     if is_connection_test_intent(user_query):
-        await cl.Message(content=await _format_settings_for_session(test_connection=True)).send()
+        await cl.Message(
+            content=await _format_settings_for_session(test_connection=True),
+            actions=_settings_actions(user_id),
+        ).send()
         return
 
     if is_settings_intent(user_query):
-        await cl.Message(content=await _format_settings_for_session()).send()
+        await cl.Message(content=await _format_settings_for_session(), actions=_settings_actions(user_id)).send()
         return
 
     if is_preference_intent(user_query) and not any(

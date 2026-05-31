@@ -1,55 +1,81 @@
 :root {
-  --fin-bg: #f6f7f9;
+  --fin-bg: #f5f7fb;
   --fin-panel: #ffffff;
-  --fin-border: #d9dee7;
+  --fin-panel-soft: #f8fafc;
+  --fin-border: #d8e0ea;
+  --fin-border-strong: #b8c4d4;
   --fin-text: #111827;
-  --fin-muted: #5b6472;
-  --fin-accent: #0f766e;
-  --fin-accent-strong: #115e59;
-  --fin-soft: #eef7f5;
-  --fin-code: #f1f5f9;
+  --fin-muted: #5f6b7a;
+  --fin-teal: #0f766e;
+  --fin-teal-soft: #e8f6f3;
+  --fin-blue: #2563eb;
+  --fin-blue-soft: #eaf1ff;
+  --fin-amber: #b45309;
+  --fin-amber-soft: #fff7ed;
+  --fin-code: #eef2f7;
+  --fin-shadow: 0 12px 30px rgba(15, 23, 42, 0.07);
 }
 
-body {
+body,
+main {
   background: var(--fin-bg) !important;
   color: var(--fin-text);
   letter-spacing: 0;
 }
 
-main {
-  background: var(--fin-bg) !important;
-}
-
-button {
-  border-radius: 8px !important;
-}
-
+button,
 textarea,
 input,
 [role="combobox"] {
   border-radius: 8px !important;
 }
 
+textarea,
+input,
+[role="combobox"] {
+  border-color: var(--fin-border) !important;
+}
+
+textarea:focus,
+input:focus,
+[role="combobox"]:focus-within {
+  border-color: var(--fin-blue) !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
+}
+
 .markdown-body,
 [class*="markdown"] {
-  line-height: 1.62;
+  color: var(--fin-text);
+  line-height: 1.58;
 }
 
 .markdown-body h1,
 [class*="markdown"] h1 {
-  margin-top: 0;
+  margin: 0 0 14px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--fin-border);
   color: var(--fin-text);
-  font-size: 30px;
+  font-size: 28px;
+  font-weight: 720;
   letter-spacing: 0;
 }
 
 .markdown-body h2,
 [class*="markdown"] h2 {
   margin-top: 28px;
+  margin-bottom: 10px;
   color: var(--fin-text);
-  font-size: 19px;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.markdown-body h3,
+[class*="markdown"] h3 {
+  margin-top: 18px;
+  color: #273244;
+  font-size: 15px;
+  font-weight: 700;
   letter-spacing: 0;
 }
 
@@ -58,22 +84,34 @@ input,
   color: var(--fin-muted);
 }
 
+.markdown-body blockquote,
+[class*="markdown"] blockquote {
+  margin: 10px 0 18px;
+  padding: 10px 14px;
+  border-left: 4px solid var(--fin-teal);
+  border-radius: 0 8px 8px 0;
+  background: var(--fin-teal-soft);
+  color: #25443f;
+}
+
 .markdown-body table,
 [class*="markdown"] table {
+  display: block;
   width: 100%;
-  overflow: hidden;
+  overflow-x: auto;
   border-collapse: separate;
   border-spacing: 0;
   border: 1px solid var(--fin-border);
   border-radius: 8px;
   background: var(--fin-panel);
+  box-shadow: var(--fin-shadow);
 }
 
 .markdown-body th,
 .markdown-body td,
 [class*="markdown"] th,
 [class*="markdown"] td {
-  padding: 10px 12px !important;
+  padding: 11px 13px !important;
   border-right: 1px solid var(--fin-border);
   border-bottom: 1px solid var(--fin-border);
   vertical-align: top;
@@ -93,9 +131,16 @@ input,
 
 .markdown-body th,
 [class*="markdown"] th {
-  background: #f8fafc;
+  background: linear-gradient(180deg, #ffffff 0%, var(--fin-panel-soft) 100%);
   color: #334155;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.markdown-body tbody tr:hover td,
+[class*="markdown"] tbody tr:hover td {
+  background: #fbfdff;
 }
 
 .markdown-body code,
@@ -107,6 +152,17 @@ input,
   font-size: 0.92em;
 }
 
+.markdown-body a,
+[class*="markdown"] a {
+  color: var(--fin-blue);
+  text-decoration: none;
+}
+
+.markdown-body a:hover,
+[class*="markdown"] a:hover {
+  text-decoration: underline;
+}
+
 [data-testid="chat-settings"] {
   border-left: 1px solid var(--fin-border);
   background: var(--fin-panel);
@@ -114,15 +170,16 @@ input,
 
 [class*="starter"],
 [class*="Starter"] {
+  border: 1px solid var(--fin-border) !important;
   border-radius: 8px !important;
-  border-color: var(--fin-border) !important;
   background: var(--fin-panel) !important;
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
 }
 
 [class*="starter"]:hover,
 [class*="Starter"]:hover {
-  border-color: var(--fin-accent) !important;
-  background: var(--fin-soft) !important;
+  border-color: var(--fin-blue) !important;
+  background: var(--fin-blue-soft) !important;
 }
 
 button:has(svg) {
@@ -130,13 +187,95 @@ button:has(svg) {
 }
 
 button:hover {
-  border-color: var(--fin-accent) !important;
+  border-color: var(--fin-blue) !important;
 }
 
-a {
-  color: var(--fin-accent-strong);
+button:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.18) !important;
+  outline-offset: 2px !important;
 }
 
-a:hover {
-  color: var(--fin-accent);
+main h1 {
+  margin: 0 0 14px !important;
+  padding-bottom: 12px !important;
+  border-bottom: 1px solid var(--fin-border) !important;
+  color: var(--fin-text) !important;
+  font-size: 30px !important;
+  line-height: 1.16 !important;
+  font-weight: 760 !important;
+  letter-spacing: 0 !important;
+}
+
+main h2 {
+  margin-top: 26px !important;
+  margin-bottom: 10px !important;
+  color: var(--fin-text) !important;
+  font-size: 18px !important;
+  line-height: 1.25 !important;
+  font-weight: 720 !important;
+  letter-spacing: 0 !important;
+}
+
+main blockquote {
+  margin: 10px 0 18px !important;
+  padding: 10px 14px !important;
+  border-left: 4px solid var(--fin-teal) !important;
+  border-radius: 0 8px 8px 0 !important;
+  background: var(--fin-teal-soft) !important;
+  color: #25443f !important;
+}
+
+main table {
+  width: 100% !important;
+  border: 1px solid var(--fin-border) !important;
+  border-radius: 8px !important;
+  background: var(--fin-panel) !important;
+  box-shadow: var(--fin-shadow) !important;
+}
+
+.prose h1 {
+  margin: 0 0 14px !important;
+  padding-bottom: 12px !important;
+  border-bottom: 1px solid var(--fin-border) !important;
+  color: var(--fin-text) !important;
+  font-size: 30px !important;
+  line-height: 1.16 !important;
+  font-weight: 760 !important;
+  letter-spacing: 0 !important;
+}
+
+.prose h2 {
+  margin-top: 26px !important;
+  margin-bottom: 10px !important;
+  color: var(--fin-text) !important;
+  font-size: 18px !important;
+  line-height: 1.25 !important;
+  font-weight: 720 !important;
+  letter-spacing: 0 !important;
+}
+
+.prose h3 {
+  margin-top: 18px !important;
+  color: #273244 !important;
+  font-size: 15px !important;
+  line-height: 1.3 !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+}
+
+.prose blockquote {
+  margin: 10px 0 18px !important;
+  padding: 10px 14px !important;
+  border-left: 4px solid var(--fin-teal) !important;
+  border-radius: 0 8px 8px 0 !important;
+  background: var(--fin-teal-soft) !important;
+  color: #25443f !important;
+}
+
+.prose table {
+  width: 100% !important;
+  border: 1px solid var(--fin-border) !important;
+  border-radius: 8px !important;
+  background: var(--fin-panel) !important;
+  box-shadow: var(--fin-shadow) !important;
 }
