@@ -29,6 +29,17 @@ from financial_agent.tools.report_browser import (
     list_reports,
     resolve_report_ticker,
 )
+from financial_agent.tools.run_dashboard import (
+    append_run_event,
+    complete_run_record,
+    create_run_record,
+    fail_run_record,
+    format_debate_dashboard_response,
+    format_live_run_board,
+    format_run_dashboard_response,
+    is_debate_dashboard_intent,
+    is_run_dashboard_intent,
+)
 from financial_agent.tools.settings_panel import (
     format_settings_response,
     is_connection_test_intent,
@@ -368,6 +379,40 @@ def _report_actions(ticker: str) -> list[cl.Action]:
     ]
 
 
+def _run_dashboard_actions(run_id: str, ticker: str = "NVDA") -> list[cl.Action]:
+    safe_ticker = ticker or "NVDA"
+    return [
+        cl.Action(
+            name="run_action",
+            payload={"intent": "run_dashboard", "run_id": run_id},
+            label="Agent 看板",
+            tooltip="查看本次多 Agent 协作过程和每个 Agent 输出",
+            icon="network",
+        ),
+        cl.Action(
+            name="run_action",
+            payload={"intent": "debate", "run_id": run_id},
+            label="多空辩论",
+            tooltip="查看 Bull / Bear / Committee 的观点对比",
+            icon="scale",
+        ),
+        cl.Action(
+            name="report_action",
+            payload={"intent": "open_report", "ticker": safe_ticker},
+            label="打开报告",
+            tooltip=f"进入 {safe_ticker} 的报告阅读页",
+            icon="book-open",
+        ),
+        cl.Action(
+            name="report_action",
+            payload={"intent": "reanalyze", "ticker": safe_ticker},
+            label="重新分析",
+            tooltip=f"重新运行 {safe_ticker} 的完整多 Agent 投研流程",
+            icon="refresh-cw",
+        ),
+    ]
+
+
 def _report_library_actions() -> list[cl.Action]:
     return [
         cl.Action(
@@ -653,6 +698,8 @@ def _format_product_landing(user_id: str) -> str:
 |---|---|---|
 | 新建研究 | 输入股票名或 ticker，自动生成中文投研报告 | 快速分析 NVDA、闪迪、小米概念股等标的 |
 | 多 Agent 流水线 | Coordinator、Market、Technical、Fundamental、Bull、Bear、Committee 等分工协作 | 展示 Agent 工程能力和投研流程 |
+| Agent 协作看板 | 实时展示每个 Agent 的状态、角色、摘要和关键输出 | 像看不同分析师协作一样理解系统运行 |
+| 多空辩论区 | 对比 Bull、Bear、Committee 的观点、置信度和裁决依据 | 观察多空分歧如何形成最终结论 |
 | 报告库 | 查看历史报告、评级、置信度、质检状态和资料链接 | 复盘历史观点，比较前后判断变化 |
 | 观察池 | 自动沉淀分析过的标的，按优先级排序 | 做每日研究队列和持续跟踪 |
 | 记忆系统 | SQLite + 本地 TF-IDF/Hash Embedding 记录偏好和历史 thesis | 让历史报告主动影响后续分析 |
@@ -1077,13 +1124,22 @@ def _brief_update(node_name: str, update: dict) -> str:
 async def _run_research_flow(user_query: str, user_id: str) -> None:
     graph = build_research_graph()
     latest_state: dict = {}
+    run_record = create_run_record(user_id, user_query)
+    run_id = str(run_record["run_id"])
+    cl.user_session.set("last_run_id", run_id)
 
     await cl.Message(
         content=(
             "# 研究任务已启动\n\n"
+            f"Run ID：`{run_id}`\n\n"
             "我会依次完成标的识别、行情与基本面、新闻风险、多空观点、投委会结论、报告生成和质量检查。"
         )
     ).send()
+    board_message = cl.Message(
+        author="Multi-Agent Run Dashboard",
+        content=format_live_run_board(run_record),
+    )
+    await board_message.send()
 
     token = _activate_session_llm_config()
     try:
@@ -1100,21 +1156,43 @@ async def _run_research_flow(user_query: str, user_id: str) -> None:
                 if not isinstance(update, dict):
                     continue
                 latest_state.update(update)
+                summary = _brief_update(node_name, update)
+                run_record = append_run_event(
+                    user_id=user_id,
+                    run_id=run_id,
+                    node_name=node_name,
+                    summary=summary,
+                    update=update,
+                )
+                board_message.content = format_live_run_board(run_record)
+                await board_message.update()
                 await cl.Message(
                     author=AGENT_TITLES.get(node_name, node_name),
-                    content=_brief_update(node_name, update),
+                    content=summary,
                 ).send()
     except Exception as exc:
+        failed_record = fail_run_record(user_id, run_id, str(exc))
+        if failed_record:
+            board_message.content = format_live_run_board(failed_record)
+            await board_message.update()
         await cl.Message(content=f"运行 Agent 流程时出错：`{exc}`").send()
         return
     finally:
         reset_runtime_llm_config(token)
 
     if latest_state.get("direct_response"):
+        stopped_record = complete_run_record(user_id, run_id, latest_state, status="stopped")
+        if stopped_record:
+            board_message.content = format_live_run_board(stopped_record)
+            await board_message.update()
         return
 
     final_report = latest_state.get("final_report")
     if not final_report:
+        failed_record = fail_run_record(user_id, run_id, "Final report is missing.")
+        if failed_record:
+            board_message.content = format_live_run_board(failed_record)
+            await board_message.update()
         await cl.Message(content="报告生成失败，请检查 ticker 或数据源连接。").send()
         return
 
@@ -1127,7 +1205,15 @@ async def _run_research_flow(user_query: str, user_id: str) -> None:
         elements.append(cl.Plotly(name="price_chart", figure=chart, display="inline"))
 
     ticker = str(latest_state.get("ticker") or "NVDA")
-    await cl.Message(content=final_report, elements=elements, actions=_report_actions(ticker)).send()
+    completed_record = complete_run_record(user_id, run_id, latest_state, status="completed")
+    if completed_record:
+        board_message.content = format_live_run_board(completed_record)
+        await board_message.update()
+    await cl.Message(
+        content=final_report,
+        elements=elements,
+        actions=_run_dashboard_actions(run_id, ticker),
+    ).send()
 
 
 @cl.set_starters
@@ -1252,6 +1338,43 @@ async def on_quick_action(action: cl.Action) -> None:
         return
 
 
+@cl.action_callback("run_action")
+async def on_run_action(action: cl.Action) -> None:
+    intent = action.payload.get("intent")
+    run_id = action.payload.get("run_id") or cl.user_session.get("last_run_id")
+    user_id = _current_user_id()
+
+    if intent == "run_dashboard":
+        await cl.Message(
+            content=format_run_dashboard_response(user_id=user_id, run_id=run_id),
+            actions=[
+                cl.Action(
+                    name="run_action",
+                    payload={"intent": "debate", "run_id": run_id},
+                    label="多空辩论",
+                    tooltip="查看 Bull / Bear / Committee 的观点对比",
+                    icon="scale",
+                )
+            ],
+        ).send()
+        return
+
+    if intent == "debate":
+        await cl.Message(
+            content=format_debate_dashboard_response(user_id=user_id, run_id=run_id),
+            actions=[
+                cl.Action(
+                    name="run_action",
+                    payload={"intent": "run_dashboard", "run_id": run_id},
+                    label="Agent 看板",
+                    tooltip="返回本次多 Agent 协作看板",
+                    icon="network",
+                )
+            ],
+        ).send()
+        return
+
+
 @cl.action_callback("report_action")
 async def on_report_action(action: cl.Action) -> None:
     intent = action.payload.get("intent")
@@ -1306,6 +1429,20 @@ async def on_message(message: cl.Message) -> None:
 
     if is_help_intent(user_query):
         await cl.Message(content=HELP_MESSAGE).send()
+        return
+
+    if is_run_dashboard_intent(user_query):
+        run_id = cl.user_session.get("last_run_id")
+        await cl.Message(
+            content=format_run_dashboard_response(user_id=user_id, run_id=run_id),
+        ).send()
+        return
+
+    if is_debate_dashboard_intent(user_query):
+        run_id = cl.user_session.get("last_run_id")
+        await cl.Message(
+            content=format_debate_dashboard_response(user_id=user_id, run_id=run_id),
+        ).send()
         return
 
     if is_dashboard_intent(user_query):

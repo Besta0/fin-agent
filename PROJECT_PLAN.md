@@ -291,6 +291,24 @@
 - `public/fin-agent.css` 覆盖 Chainlit 默认样式，优化标题层级、表格密度、按钮、输入框、侧边栏和工作台观感
 - `.chainlit/config.toml` 启用 wide layout、light theme 和 custom CSS
 
+### Run Dashboard
+
+职责：
+
+- 把一次投研分析可视化成一个多 Agent 协作过程
+- 让用户像看团队成员工作一样，看到每个 Agent 的角色、状态、摘要和关键输出
+- 把 Bull / Bear / Committee 的观点放进独立辩论区，突出多空分歧和投委会裁决
+- 为后续独立前端或 WebSocket 实时看板沉淀结构化 run 数据
+
+当前实现：
+
+- 使用 `financial_agent/tools/run_dashboard.py` 管理 run 记录
+- 每次 Chainlit 分析创建 `run_id`，并写入 `outputs/users/{user_id}/runs/*.json`
+- LangGraph 每个节点完成后追加 event：node、agent_name、role、summary、finished_at、关键输出
+- Chainlit 运行中实时更新 “Multi-Agent 协作看板”
+- 分析完成后提供快捷按钮：Agent 看板、多空辩论、打开报告、重新分析
+- 支持直接输入 `Agent 看板`、`协作看板`、`多空辩论` 查看最近一次 run
+
 ### Report Agent
 
 职责：
@@ -342,6 +360,7 @@ Chainlit UI
 Intent Router
   ├─ Help Intent → 能力说明和示例问题
   ├─ Dashboard Intent → 投研工作台
+  ├─ Run Dashboard Intent → Agent 协作看板 / 多空辩论
   ├─ Report Browser Intent → 报告详情 / 报告列表
   ├─ Settings Intent → 模型设置 / 连接测试
   ├─ Watchlist Intent → 观察池表格

@@ -35,6 +35,8 @@ Chainlit 现在有两层产品入口：产品主页负责介绍价值和功能�
 - 任务中心：根据当前配置自动给出下一步动作，例如先配置模型、测试连接、打开观察池或复盘最新报告
 - 工作区：把新建研究、报告库、观察池、记忆库、模型设置固定成核心入口
 - 研究流水线：展示标的识别、数据采集、分析辩论、报告质检、观察池沉淀的完整路径
+- Agent 协作看板：每次分析生成 run 记录，实时展示每个 Agent 的状态、角色、摘要和关键输出
+- 多空辩论区：把 Bull、Bear、Committee 的观点放到同一页，像投委会讨论一样展示分歧和裁决
 - 上下文按钮：产品主页提供“进入工作台 / 分析标的 / 模型设置 / 能力指南”，工作台按状态提供研究动作
 - 侧边栏设置：用户可以按 provider 选择模型，provider 改变时 model 和 base_url 跟随刷新，并支持自定义模型名和本会话 API key
 - 视觉风格：`public/fin-agent.css` 覆盖 Chainlit 默认样式，压缩标题层级，优化表格、按钮、输入框、侧边栏和工作台留白，让界面更像可长期使用的投研产品
@@ -50,6 +52,7 @@ Intent Router
   ├─ Help Intent → Capability Guide
   ├─ Watchlist Intent → Watchlist Table
   ├─ Watchlist Detail Intent → Watchlist Item Detail
+  ├─ Run Dashboard Intent → Agent Collaboration Board
   ↓
 LangGraph Workflow
   ↓
@@ -316,6 +319,28 @@ portfolio
 /dashboard
 dashboard
 仪表盘
+```
+
+### Run Dashboard
+
+文件：`financial_agent/tools/run_dashboard.py`
+
+职责：
+
+- 为每次 LangGraph 分析生成一个 `run_id`
+- 把每个 Agent 的完成状态、角色、摘要和关键输出写入本地 JSON
+- 在 Chainlit 中渲染“Multi-Agent 协作看板”，让用户看到不同 Agent 像团队成员一样工作
+- 提供“多空辩论区”，集中展示 Bull Agent、Bear Agent 和 Committee Agent 的观点分歧与裁决
+- 分析完成后提供快捷按钮：Agent 看板、多空辩论、打开报告、重新分析
+- run 文件保存到 `outputs/users/{user_id}/runs/*.json`，不会进入 git
+
+触发方式：
+
+```text
+Agent 看板
+协作看板
+多空辩论
+看多看空
 ```
 
 ### Report Browser
@@ -713,6 +738,8 @@ python -m financial_agent.cli "为什么 NVDA 在观察池"
 你能做什么
 产品主页
 进入工作台
+Agent 看板
+多空辩论
 记住我偏好短线，只看科技股
 以前分析过 NVDA 吗
 投研工作台

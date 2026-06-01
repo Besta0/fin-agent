@@ -20,6 +20,12 @@ from financial_agent.tools.report_browser import (
     is_report_browser_intent,
     is_report_list_intent,
 )
+from financial_agent.tools.run_dashboard import (
+    format_debate_dashboard_response,
+    format_run_dashboard_response,
+    is_debate_dashboard_intent,
+    is_run_dashboard_intent,
+)
 from financial_agent.tools.settings_panel import (
     format_settings_response,
     is_connection_test_intent,
@@ -47,6 +53,14 @@ async def main() -> int:
 
     if is_help_intent(query):
         print(HELP_MESSAGE)
+        return 0
+
+    if is_run_dashboard_intent(query):
+        print(format_run_dashboard_response(user_id))
+        return 0
+
+    if is_debate_dashboard_intent(query):
+        print(format_debate_dashboard_response(user_id))
         return 0
 
     if is_dashboard_intent(query):
