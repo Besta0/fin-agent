@@ -113,9 +113,23 @@ HOME_KEYWORDS = [
     "主页",
     "home",
     "产品首页",
+    "产品主页",
+    "产品介绍",
+    "产品功能",
+    "介绍产品",
+    "功能介绍",
+    "landing",
+    "官网",
     "回到首页",
     "开始",
     "start",
+]
+
+WORKSPACE_HOME_KEYWORDS = [
+    "进入工作台",
+    "工作台首页",
+    "任务中心",
+    "研究工作台",
 ]
 
 QUICK_ACTION_DEFS = [
@@ -189,6 +203,42 @@ def _quick_actions() -> list[cl.Action]:
     ]
 
 
+def _product_landing_actions(user_id: str) -> list[cl.Action]:
+    config = _effective_llm_config_for_ui()
+    ticker = _top_watchlist_ticker(user_id)
+    model_label = "模型设置" if config.llm_api_key else "配置模型"
+    return [
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "workspace_home"},
+            label="进入工作台",
+            tooltip="打开状态栏、任务中心和研究流水线",
+            icon="layout-dashboard",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "analyze_top", "ticker": ticker},
+            label=f"分析 {ticker}",
+            tooltip=f"启动 {ticker} 的完整多 Agent 投研流程",
+            icon="search",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "settings"},
+            label=model_label,
+            tooltip="配置 provider、model、base_url 和 API key",
+            icon="settings",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "help"},
+            label="能力指南",
+            tooltip="查看完整功能说明和示例问题",
+            icon="circle-help",
+        ),
+    ]
+
+
 def _home_actions(user_id: str) -> list[cl.Action]:
     config = _effective_llm_config_for_ui()
     ticker = _top_watchlist_ticker(user_id)
@@ -222,6 +272,13 @@ def _home_actions(user_id: str) -> list[cl.Action]:
                 tooltip="查看研究队列和优先级",
                 icon="star",
             ),
+            cl.Action(
+                name="quick_action",
+                payload={"intent": "product_home"},
+                label="产品主页",
+                tooltip="回到产品功能介绍页",
+                icon="home",
+            ),
         ]
 
     return [
@@ -252,6 +309,13 @@ def _home_actions(user_id: str) -> list[cl.Action]:
             label="模型设置",
             tooltip="管理 provider、model、base_url 和 API key",
             icon="settings",
+        ),
+        cl.Action(
+            name="quick_action",
+            payload={"intent": "product_home"},
+            label="产品主页",
+            tooltip="回到产品功能介绍页",
+            icon="home",
         ),
     ]
 
@@ -341,8 +405,8 @@ def _workspace_actions() -> list[cl.Action]:
     return [
         cl.Action(
             name="quick_action",
-            payload={"intent": "home"},
-            label="首页",
+            payload={"intent": "product_home"},
+            label="产品主页",
             tooltip="回到产品首页",
             icon="home",
         ),
@@ -430,8 +494,8 @@ def _settings_actions(user_id: str) -> list[cl.Action]:
         ),
         cl.Action(
             name="quick_action",
-            payload={"intent": "home"},
-            label="首页",
+            payload={"intent": "product_home"},
+            label="产品主页",
             tooltip="回到产品首页",
             icon="home",
         ),
@@ -444,6 +508,14 @@ def _is_home_intent(text: str) -> bool:
         return False
     compact = "".join(normalized.split())
     return any(keyword.lower().replace(" ", "") == compact for keyword in HOME_KEYWORDS)
+
+
+def _is_workspace_home_intent(text: str) -> bool:
+    normalized = text.strip().lower()
+    if not normalized:
+        return False
+    compact = "".join(normalized.split())
+    return any(keyword.lower().replace(" ", "") == compact for keyword in WORKSPACE_HOME_KEYWORDS)
 
 
 def _current_session_key() -> str:
@@ -550,6 +622,73 @@ def _build_session_llm_config(updated: dict) -> LLMConfig:
 
 def _activate_session_llm_config():
     return set_runtime_llm_config(_session_llm_config())
+
+
+def _format_product_landing(user_id: str) -> str:
+    config = _effective_llm_config_for_ui()
+    watchlist_items = load_watchlist(user_id).get("items", [])
+    reports = list_reports(user_id, limit=5)
+    vector_count = count_vector_memories(user_id)
+    semantic_count = len(load_semantic_memories(user_id))
+    top_ticker = str(watchlist_items[0].get("ticker")) if watchlist_items else "NVDA"
+    key_status = "已配置，可以生成完整 AI 报告" if config.llm_api_key else "未配置，建议先进入模型设置"
+    base_url = config.llm_base_url or "OpenAI 默认"
+
+    return f"""# Fin Agent
+
+> 面向中文用户的 AI 投研工作台。它把一句股票问题，拆成数据采集、技术面、基本面、新闻风险、多空辩论、投委会结论、报告质检和观察池跟踪。
+
+## 产品价值
+
+| 用户痛点 | Fin Agent 的解决方式 | 结果 |
+|---|---|---|
+| 不知道先看什么 | 自动识别标的、周期和问题类型 | 从自然语言直接进入研究任务 |
+| 信息分散 | 聚合行情、技术指标、基本面、新闻线索和历史记忆 | 一份报告里看到完整证据链 |
+| AI 结论不透明 | 多 Agent 分工输出中间过程 | 能看到每一步为什么这么判断 |
+| 报告用完就丢 | 保存报告、写入记忆、更新观察池 | 形成可复盘的连续研究循环 |
+
+## 核心功能
+
+| 功能模块 | 能做什么 | 适合场景 |
+|---|---|---|
+| 新建研究 | 输入股票名或 ticker，自动生成中文投研报告 | 快速分析 NVDA、闪迪、小米概念股等标的 |
+| 多 Agent 流水线 | Coordinator、Market、Technical、Fundamental、Bull、Bear、Committee 等分工协作 | 展示 Agent 工程能力和投研流程 |
+| 报告库 | 查看历史报告、评级、置信度、质检状态和资料链接 | 复盘历史观点，比较前后判断变化 |
+| 观察池 | 自动沉淀分析过的标的，按优先级排序 | 做每日研究队列和持续跟踪 |
+| 记忆系统 | SQLite + 本地 TF-IDF/Hash Embedding 记录偏好和历史 thesis | 让历史报告主动影响后续分析 |
+| 模型设置 | 支持 OpenAI、DeepSeek、MiniMax、小米 MiMo 和兼容接口 | 用户可自行配置 API key 和模型 |
+
+## 研究流程
+
+| 步骤 | 系统动作 | 用户获得 |
+|---:|---|---|
+| 1 | 识别 ticker、公司名、市场和周期 | 不需要严格输入股票代码 |
+| 2 | 拉取行情、指标、基本面和新闻线索 | 结构化证据，不只是聊天回答 |
+| 3 | 生成看多、看空和投委会观点 | 有分歧、有权衡、有最终评级 |
+| 4 | 写入报告库、记忆库和观察池 | 下次分析能延续历史上下文 |
+| 5 | 质量检查报告一致性 | 减少数据和结论互相矛盾 |
+
+## 当前环境
+
+| 项目 | 状态 |
+|---|---|
+| Provider | **{_provider_label(config.llm_provider)}** |
+| Model | **{config.llm_model}** |
+| Base URL | `{base_url}` |
+| API Key | **{key_status}** |
+| 观察池 | **{len(watchlist_items)}** 个标的 |
+| 报告库 | **{len(reports)}** 份报告 |
+| 记忆库 | **{vector_count + semantic_count}** 条记录 |
+
+## 现在可以开始
+
+| 你想做什么 | 建议入口 |
+|---|---|
+| 先了解系统状态和下一步任务 | 点击 **进入工作台** |
+| 直接体验完整投研流程 | 点击 **分析 {top_ticker}** |
+| 先配置自己的模型和 API key | 点击 **模型设置** |
+| 查看完整能力和示例问题 | 点击 **能力指南** |
+"""
 
 
 def _format_product_home(user_id: str) -> str:
@@ -995,6 +1134,16 @@ async def _run_research_flow(user_query: str, user_id: str) -> None:
 async def set_starters():
     return [
         cl.Starter(
+            label="产品主页",
+            message="产品主页",
+            icon="home",
+        ),
+        cl.Starter(
+            label="进入工作台",
+            message="进入工作台",
+            icon="layout-dashboard",
+        ),
+        cl.Starter(
             label="新建研究",
             message="帮我分析一下 NVDA 未来一个月走势",
             icon="search",
@@ -1019,11 +1168,6 @@ async def set_starters():
             message="测试模型连接",
             icon="plug",
         ),
-        cl.Starter(
-            label="能力指南",
-            message="你能做什么",
-            icon="circle-help",
-        ),
     ]
 
 
@@ -1032,8 +1176,8 @@ async def on_chat_start() -> None:
     user_id = _current_user_id()
     await _send_settings_widgets()
     await cl.Message(
-        content=_format_product_home(user_id),
-        actions=_home_actions(user_id),
+        content=_format_product_landing(user_id),
+        actions=_product_landing_actions(user_id),
     ).send()
 
 
@@ -1061,7 +1205,14 @@ async def on_quick_action(action: cl.Action) -> None:
     intent = action.payload.get("intent")
     user_id = _current_user_id()
 
-    if intent == "home":
+    if intent in {"home", "product_home"}:
+        await cl.Message(
+            content=_format_product_landing(user_id),
+            actions=_product_landing_actions(user_id),
+        ).send()
+        return
+
+    if intent == "workspace_home":
         await cl.Message(content=_format_product_home(user_id), actions=_home_actions(user_id)).send()
         return
 
@@ -1143,6 +1294,13 @@ async def on_message(message: cl.Message) -> None:
         return
 
     if _is_home_intent(user_query):
+        await cl.Message(
+            content=_format_product_landing(user_id),
+            actions=_product_landing_actions(user_id),
+        ).send()
+        return
+
+    if _is_workspace_home_intent(user_query):
         await cl.Message(content=_format_product_home(user_id), actions=_home_actions(user_id)).send()
         return
 
