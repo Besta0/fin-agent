@@ -5,13 +5,22 @@ import asyncio
 import json
 import mimetypes
 import threading
+from datetime import datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from financial_agent.graph.workflow import build_research_graph
-from financial_agent.tools.memory import safe_user_id
+from financial_agent.tools.memory import safe_user_id, user_reports_dir
+from financial_agent.tools.report_browser import (
+    _extract_confidence,
+    _extract_links,
+    _extract_period,
+    _extract_quality_status,
+    _extract_rating,
+    _report_title,
+)
 from financial_agent.tools.run_dashboard import (
     append_run_event,
     complete_run_record,
@@ -102,6 +111,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._send_json(run_dashboard_payload(user_id, None))
             return
 
+        if path == "/api/report":
+            self._send_json(_report_payload(user_id, run_id or None))
+            return
+
         if path.startswith("/api/run/"):
             requested_run_id = path.removeprefix("/api/run/").strip("/")
             run = load_run(user_id, requested_run_id)
@@ -156,6 +169,70 @@ def _first(query: dict[str, list[str]], key: str, fallback: str) -> str:
     if not values:
         return fallback
     return values[0] or fallback
+
+
+def _report_payload(user_id: str, run_id: str | None) -> dict:
+    run = load_run(user_id, run_id)
+    if not run:
+        return {"ok": False, "status": "missing_run", "message": "没有找到对应 run。"}
+
+    report_path = str(run.get("report_path") or "").strip()
+    if not report_path:
+        return {"ok": False, "status": "pending", "message": "报告尚未生成。", "run": _report_run_summary(run)}
+
+    path = Path(report_path)
+    if not path.is_absolute():
+        path = PROJECT_ROOT / path
+    path = path.resolve()
+
+    reports_root = (PROJECT_ROOT / user_reports_dir(user_id)).resolve()
+    if reports_root not in path.parents and path != reports_root:
+        return {"ok": False, "status": "forbidden", "message": "报告路径不属于当前用户目录。"}
+
+    if not path.exists() or not path.is_file():
+        return {
+            "ok": False,
+            "status": "missing_report",
+            "message": "报告文件不存在。",
+            "path": str(path),
+            "run": _report_run_summary(run),
+        }
+
+    try:
+        markdown = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {"ok": False, "status": "read_error", "message": str(exc), "path": str(path), "run": _report_run_summary(run)}
+
+    ticker = run.get("ticker") or (path.stem.split("_", 1)[0] if path.stem else "N/A")
+    updated_at = datetime.fromtimestamp(path.stat().st_mtime).isoformat(timespec="seconds")
+    return {
+        "ok": True,
+        "run": _report_run_summary(run),
+        "report": {
+            "title": _report_title(markdown, fallback=f"{ticker} 报告"),
+            "ticker": ticker,
+            "path": str(path),
+            "updated_at": updated_at,
+            "kind": "质检版" if "_verified_" in path.stem else "初稿",
+            "rating": _extract_rating(markdown),
+            "confidence": _extract_confidence(markdown),
+            "period": _extract_period(markdown),
+            "quality_status": _extract_quality_status(markdown),
+            "links": _extract_links(markdown, limit=12),
+            "markdown": markdown,
+        },
+    }
+
+
+def _report_run_summary(run: dict) -> dict:
+    return {
+        "run_id": run.get("run_id"),
+        "status": run.get("status"),
+        "ticker": run.get("ticker"),
+        "rating": run.get("rating"),
+        "confidence": run.get("confidence"),
+        "report_path": run.get("report_path"),
+    }
 
 
 def _run_research_in_background(user_id: str, run_id: str, query: str) -> None:

@@ -1,8 +1,12 @@
+const initialParams = new URLSearchParams(window.location.search);
+
 const state = {
-  userId: localStorage.getItem("finAgentDashboardUser") || "chainlit",
-  runId: "",
+  userId: initialParams.get("user_id") || localStorage.getItem("finAgentDashboardUser") || "chainlit",
+  runId: initialParams.get("run_id") || "",
   selectedNode: "coordinator",
   payload: null,
+  report: null,
+  reportKey: "",
   refreshTimer: null,
 };
 
@@ -51,6 +55,12 @@ const els = {
   bearArgs: document.getElementById("bearArgs"),
   committeeSummary: document.getElementById("committeeSummary"),
   committeeArgs: document.getElementById("committeeArgs"),
+  reportStatus: document.getElementById("reportStatus"),
+  reloadReportBtn: document.getElementById("reloadReportBtn"),
+  reportMeta: document.getElementById("reportMeta"),
+  reportBody: document.getElementById("reportBody"),
+  reportPath: document.getElementById("reportPath"),
+  reportLinks: document.getElementById("reportLinks"),
 };
 
 async function init() {
@@ -74,6 +84,7 @@ function bindEvents() {
   });
 
   els.refreshBtn.addEventListener("click", loadPayload);
+  els.reloadReportBtn.addEventListener("click", () => loadReport({ force: true }));
 
   els.startRunBtn.addEventListener("click", startRun);
   els.queryInput.addEventListener("keydown", async (event) => {
@@ -118,7 +129,9 @@ async function loadPayload() {
   }
 
   renderRunOptions();
+  syncUrl();
   renderDashboard();
+  await syncReportForCurrentRun();
 }
 
 async function getJson(url) {
@@ -142,6 +155,64 @@ async function postJson(url, payload) {
   return data;
 }
 
+async function syncReportForCurrentRun() {
+  const run = state.payload?.run;
+  if (!run || !run.report_path) {
+    state.report = null;
+    state.reportKey = "";
+    renderReportPanel();
+    return;
+  }
+
+  const reportKey = `${run.run_id}:${run.report_path}`;
+  if (state.reportKey === reportKey && state.report) {
+    renderReportPanel();
+    return;
+  }
+  await loadReport();
+}
+
+async function loadReport({ force = false } = {}) {
+  const run = state.payload?.run;
+  if (!run) {
+    renderReportPanel();
+    return;
+  }
+
+  if (!force && !run.report_path) {
+    state.report = null;
+    state.reportKey = "";
+    renderReportPanel();
+    return;
+  }
+
+  const params = new URLSearchParams({ user_id: state.userId });
+  if (run.run_id) {
+    params.set("run_id", run.run_id);
+  }
+
+  els.reloadReportBtn.disabled = true;
+  els.reportStatus.textContent = "读取中";
+  try {
+    const data = await getJson(`/api/report?${params.toString()}`);
+    if (!data.ok) {
+      state.report = null;
+      state.reportKey = "";
+      renderReportPanel(data);
+      return;
+    }
+    state.report = data.report;
+    state.reportKey = `${run.run_id}:${data.report.path}`;
+    renderReportPanel();
+  } catch (error) {
+    state.report = null;
+    state.reportKey = "";
+    renderReportPanel({ ok: false, message: `读取报告失败：${error.message}` });
+  } finally {
+    els.reloadReportBtn.disabled = false;
+  }
+}
+
 async function startRun() {
   const query = els.queryInput.value.trim();
   if (!query) {
@@ -159,6 +230,8 @@ async function startRun() {
     });
     state.userId = data.user_id;
     state.runId = data.run_id;
+    state.report = null;
+    state.reportKey = "";
     localStorage.setItem("finAgentDashboardUser", state.userId);
     els.queryInput.value = "";
     els.launchStatus.textContent = `已启动 run ${data.run_id}，看板会自动刷新。`;
@@ -187,6 +260,18 @@ function renderRunOptions() {
   }
   els.runSelect.value = currentRunId || runs[0].run_id;
   state.runId = els.runSelect.value;
+}
+
+function syncUrl() {
+  const params = new URLSearchParams();
+  if (state.userId) {
+    params.set("user_id", state.userId);
+  }
+  if (state.runId) {
+    params.set("run_id", state.runId);
+  }
+  const nextUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ""}`;
+  window.history.replaceState(null, "", nextUrl);
 }
 
 function renderDashboard() {
@@ -325,6 +410,79 @@ function renderDebate(eventByNode, run) {
   els.committeeArgs.innerHTML = renderList("关键依据", committee.key_reasons, "不确定性", committee.uncertainty ? [committee.uncertainty] : []);
 }
 
+function renderReportPanel(pendingPayload = null) {
+  const run = state.payload?.run;
+  const report = state.report;
+  els.reloadReportBtn.disabled = !run;
+
+  if (!run) {
+    els.reportStatus.textContent = "暂无 run";
+    els.reportMeta.innerHTML = "";
+    els.reportPath.textContent = "尚未生成";
+    els.reportBody.innerHTML = `<div class="empty">先启动一次研究，报告会在分析完成后出现在这里。</div>`;
+    els.reportLinks.innerHTML = `<p class="muted">暂无链接。</p>`;
+    return;
+  }
+
+  if (!report) {
+    const message = pendingPayload?.message || (run.report_path ? "报告可读取，点击读取报告。" : "等待 Report / Verifier Agent 生成报告。");
+    els.reportStatus.textContent = run.status === "running" ? "生成中" : "待读取";
+    els.reportMeta.innerHTML = renderReportMeta({
+      ticker: run.ticker || "识别中",
+      rating: run.rating || "待投委会",
+      confidence: run.confidence ? `${run.confidence}%` : "N/A",
+      quality_status: "N/A",
+      updated_at: run.updated_at || "N/A",
+    });
+    els.reportPath.textContent = run.report_path || "尚未生成";
+    els.reportBody.innerHTML = `<div class="empty">${escapeHtml(message)}</div>`;
+    els.reportLinks.innerHTML = `<p class="muted">报告生成后会自动展示链接。</p>`;
+    return;
+  }
+
+  els.reportStatus.textContent = `${report.kind || "报告"} / ${report.updated_at || "N/A"}`;
+  els.reportMeta.innerHTML = renderReportMeta(report);
+  els.reportPath.textContent = report.path || "N/A";
+  els.reportBody.innerHTML = markdownToHtml(report.markdown || "");
+  els.reportLinks.innerHTML = renderReportLinks(report.links || []);
+}
+
+function renderReportMeta(report) {
+  const items = [
+    ["标题", report.title || report.ticker || "N/A"],
+    ["评级", report.rating || "N/A"],
+    ["置信度", report.confidence || "N/A"],
+    ["周期", report.period || "N/A"],
+    ["质检", report.quality_status || "N/A"],
+  ];
+  return items
+    .map(
+      ([label, value]) => `
+        <div>
+          <span class="metric-label">${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function renderReportLinks(links) {
+  if (!Array.isArray(links) || links.length === 0) {
+    return `<p class="muted">这份报告没有解析到外部链接。</p>`;
+  }
+  return links
+    .map(
+      (link) => `
+        <div class="report-link">
+          <a href="${escapeAttribute(link.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(link.title || link.url)}</a>
+          <span>${escapeHtml([link.publisher, link.date].filter((item) => item && item !== "N/A").join(" / ") || "来源信息待补充")}</span>
+        </div>
+      `,
+    )
+    .join("");
+}
+
 function renderList(titleA, listA, titleB, listB) {
   const first = Array.isArray(listA) && listA.length > 0
     ? `<p class="metric-label">${escapeHtml(titleA)}</p><ol class="list-block">${listA
@@ -387,6 +545,158 @@ function formatPlain(value) {
   return String(value);
 }
 
+function markdownToHtml(markdown) {
+  const lines = String(markdown || "").split(/\r?\n/);
+  const html = [];
+  let paragraph = [];
+  let list = [];
+  let listType = "";
+  let codeBlock = [];
+  let inCode = false;
+
+  const flushParagraph = () => {
+    if (paragraph.length === 0) {
+      return;
+    }
+    html.push(`<p>${renderInline(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+  const flushList = () => {
+    if (list.length === 0) {
+      return;
+    }
+    const tag = listType === "ol" ? "ol" : "ul";
+    html.push(`<${tag}>${list.map((item) => `<li>${renderInline(item)}</li>`).join("")}</${tag}>`);
+    list = [];
+    listType = "";
+  };
+  const flushCode = () => {
+    if (codeBlock.length === 0) {
+      return;
+    }
+    html.push(`<pre><code>${escapeHtml(codeBlock.join("\n"))}</code></pre>`);
+    codeBlock = [];
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("```")) {
+      flushParagraph();
+      flushList();
+      if (inCode) {
+        flushCode();
+        inCode = false;
+      } else {
+        inCode = true;
+      }
+      continue;
+    }
+    if (inCode) {
+      codeBlock.push(line);
+      continue;
+    }
+
+    if (!trimmed) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    if (isTableStart(lines, index)) {
+      flushParagraph();
+      flushList();
+      const tableLines = [];
+      while (index < lines.length && lines[index].includes("|")) {
+        tableLines.push(lines[index]);
+        index += 1;
+      }
+      index -= 1;
+      html.push(renderTable(tableLines));
+      continue;
+    }
+
+    const heading = trimmed.match(/^(#{1,4})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      flushList();
+      const level = Math.min(heading[1].length, 4);
+      html.push(`<h${level}>${renderInline(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    const ordered = trimmed.match(/^\d+\.\s+(.+)$/);
+    const unordered = trimmed.match(/^[-*]\s+(.+)$/);
+    if (ordered || unordered) {
+      flushParagraph();
+      const nextType = ordered ? "ol" : "ul";
+      if (listType && listType !== nextType) {
+        flushList();
+      }
+      listType = nextType;
+      list.push((ordered || unordered)[1]);
+      continue;
+    }
+
+    paragraph.push(trimmed);
+  }
+
+  flushParagraph();
+  flushList();
+  flushCode();
+  return html.join("");
+}
+
+function isTableStart(lines, index) {
+  if (!lines[index]?.includes("|") || !lines[index + 1]?.includes("|")) {
+    return false;
+  }
+  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[index + 1]);
+}
+
+function renderTable(lines) {
+  const rows = lines
+    .filter((line) => !/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line))
+    .map(parseTableRow)
+    .filter((row) => row.length > 0);
+  if (rows.length === 0) {
+    return "";
+  }
+  const [header, ...body] = rows;
+  return `
+    <table>
+      <thead><tr>${header.map((cell) => `<th>${renderInline(cell)}</th>`).join("")}</tr></thead>
+      <tbody>${body.map((row) => `<tr>${row.map((cell) => `<td>${renderInline(cell)}</td>`).join("")}</tr>`).join("")}</tbody>
+    </table>
+  `;
+}
+
+function parseTableRow(line) {
+  return line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function renderInline(text) {
+  const source = String(text || "");
+  const linkPattern = /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g;
+  let output = "";
+  let lastIndex = 0;
+  for (const match of source.matchAll(linkPattern)) {
+    output += escapeHtml(source.slice(lastIndex, match.index));
+    output += `<a href="${escapeAttribute(match[2])}" target="_blank" rel="noopener noreferrer">${escapeHtml(match[1])}</a>`;
+    lastIndex = match.index + match[0].length;
+  }
+  output += escapeHtml(source.slice(lastIndex));
+  return output
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+}
+
 function statusForNode(run, node, event) {
   if (event) {
     return "已完成";
@@ -410,6 +720,10 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value).replaceAll("`", "&#096;");
 }
 
 function stripMarkdown(value) {

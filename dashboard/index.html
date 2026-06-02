@@ -124,6 +124,30 @@
             </article>
           </div>
         </section>
+
+        <section class="panel report-panel">
+          <div class="panel-title">
+            <h2>报告阅读页</h2>
+            <div class="report-actions">
+              <span id="reportStatus">等待报告生成</span>
+              <button id="reloadReportBtn" type="button">读取报告</button>
+            </div>
+          </div>
+          <div id="reportMeta" class="report-meta"></div>
+          <div class="report-layout">
+            <article id="reportBody" class="report-body">
+              <div class="empty">分析完成后，这里会展示本次 run 的质检版 Markdown 报告。</div>
+            </article>
+            <aside class="report-sidebar">
+              <span class="metric-label">报告路径</span>
+              <code id="reportPath">尚未生成</code>
+              <span class="metric-label">新闻与资料链接</span>
+              <div id="reportLinks" class="report-links">
+                <p class="muted">报告生成后会自动展示链接。</p>
+              </div>
+            </aside>
+          </div>
+        </section>
       </main>
     </div>
 
