@@ -36,6 +36,7 @@ Chainlit 现在有两层产品入口：产品主页负责介绍价值和功能�
 - 工作区：把新建研究、报告库、观察池、记忆库、模型设置固定成核心入口
 - 研究流水线：展示标的识别、数据采集、分析辩论、报告质检、观察池沉淀的完整路径
 - Agent 协作看板：每次分析生成 run 记录，实时展示每个 Agent 的状态、角色、摘要和关键输出
+- 独立看板前端：可在 `http://localhost:8001` 单独查看 run、Agent 队列、详情和时间线
 - 多空辩论区：把 Bull、Bear、Committee 的观点放到同一页，像投委会讨论一样展示分歧和裁决
 - 上下文按钮：产品主页提供“进入工作台 / 分析标的 / 模型设置 / 能力指南”，工作台按状态提供研究动作
 - 侧边栏设置：用户可以按 provider 选择模型，provider 改变时 model 和 base_url 跟随刷新，并支持自定义模型名和本会话 API key
@@ -323,13 +324,20 @@ dashboard
 
 ### Run Dashboard
 
-文件：`financial_agent/tools/run_dashboard.py`
+文件：
+
+- `financial_agent/tools/run_dashboard.py`
+- `financial_agent/dashboard_server.py`
+- `dashboard/index.html`
+- `dashboard/app.css`
+- `dashboard/app.js`
 
 职责：
 
 - 为每次 LangGraph 分析生成一个 `run_id`
 - 把每个 Agent 的完成状态、角色、摘要和关键输出写入本地 JSON
 - 在 Chainlit 中渲染“Multi-Agent 协作看板”，让用户看到不同 Agent 像团队成员一样工作
+- 提供独立前端看板：顶部指标、Agent 卡片、详情面板、协作时间线和多空辩论区
 - 提供“多空辩论区”，集中展示 Bull Agent、Bear Agent 和 Committee Agent 的观点分歧与裁决
 - 分析完成后提供快捷按钮：Agent 看板、多空辩论、打开报告、重新分析
 - run 文件保存到 `outputs/users/{user_id}/runs/*.json`，不会进入 git
@@ -720,6 +728,18 @@ chainlit run app.py
 
 ```text
 http://localhost:8000
+```
+
+启动独立 Agent 看板：
+
+```bash
+python -m financial_agent.dashboard_server --host 127.0.0.1 --port 8001
+```
+
+打开：
+
+```text
+http://localhost:8001
 ```
 
 命令行测试：

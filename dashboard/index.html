@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fin Agent Run Dashboard</title>
+    <link rel="stylesheet" href="/app.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Fin Agent</p>
+          <h1>Multi-Agent Run Dashboard</h1>
+        </div>
+        <div class="toolbar">
+          <label>
+            用户
+            <select id="userSelect"></select>
+          </label>
+          <label>
+            Run
+            <select id="runSelect"></select>
+          </label>
+          <button id="refreshBtn" type="button">刷新</button>
+        </div>
+      </header>
+
+      <main>
+        <section class="summary-band">
+          <div>
+            <span class="metric-label">标的</span>
+            <strong id="tickerMetric">N/A</strong>
+          </div>
+          <div>
+            <span class="metric-label">状态</span>
+            <strong id="statusMetric">N/A</strong>
+          </div>
+          <div>
+            <span class="metric-label">结论</span>
+            <strong id="ratingMetric">待投委会</strong>
+          </div>
+          <div>
+            <span class="metric-label">置信度</span>
+            <strong id="confidenceMetric">N/A</strong>
+          </div>
+          <div>
+            <span class="metric-label">完成度</span>
+            <strong id="progressMetric">0/14</strong>
+          </div>
+        </section>
+
+        <section class="run-context">
+          <div>
+            <span class="metric-label">用户问题</span>
+            <p id="queryText">暂无运行记录。</p>
+          </div>
+          <div>
+            <span class="metric-label">Run ID</span>
+            <code id="runIdText">N/A</code>
+          </div>
+          <div>
+            <span class="metric-label">更新时间</span>
+            <p id="updatedText">N/A</p>
+          </div>
+        </section>
+
+        <div class="layout-grid">
+          <section class="panel agent-panel">
+            <div class="panel-title">
+              <h2>Agent 协作队列</h2>
+              <span id="agentCount">0 agents</span>
+            </div>
+            <div id="agentGrid" class="agent-grid"></div>
+          </section>
+
+          <section class="panel detail-panel">
+            <div class="panel-title">
+              <h2 id="detailTitle">Agent 详情</h2>
+              <span id="detailStatus">等待中</span>
+            </div>
+            <p id="detailMission" class="muted"></p>
+            <div id="detailContent" class="detail-content"></div>
+          </section>
+
+          <aside class="panel timeline-panel">
+            <div class="panel-title">
+              <h2>协作时间线</h2>
+              <span id="eventCount">0 events</span>
+            </div>
+            <div id="timeline" class="timeline"></div>
+          </aside>
+        </div>
+
+        <section class="panel debate-panel">
+          <div class="panel-title">
+            <h2>多空辩论区</h2>
+            <span id="debateStatus">等待 Bull / Bear / Committee</span>
+          </div>
+          <div class="debate-grid">
+            <article>
+              <h3>Bull Agent</h3>
+              <p id="bullSummary" class="debate-summary">暂无看多观点。</p>
+              <div id="bullArgs"></div>
+            </article>
+            <article>
+              <h3>Bear Agent</h3>
+              <p id="bearSummary" class="debate-summary">暂无看空观点。</p>
+              <div id="bearArgs"></div>
+            </article>
+            <article>
+              <h3>Committee</h3>
+              <p id="committeeSummary" class="debate-summary">等待投委会裁决。</p>
+              <div id="committeeArgs"></div>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

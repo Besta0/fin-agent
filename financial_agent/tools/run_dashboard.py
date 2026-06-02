@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from financial_agent.tools.memory import safe_user_id, user_dir
+from financial_agent.tools.memory import USERS_DIR, safe_user_id, user_dir
 
 
 AGENT_FLOW = [
@@ -118,6 +118,77 @@ def load_latest_run(user_id: str | None = None) -> dict[str, Any] | None:
         if isinstance(data, dict):
             return data
     return None
+
+
+def list_run_users() -> list[dict[str, Any]]:
+    if not USERS_DIR.exists():
+        return []
+
+    users: list[dict[str, Any]] = []
+    for directory in sorted(USERS_DIR.iterdir(), key=lambda path: path.name):
+        runs_dir = directory / "runs"
+        if not directory.is_dir() or not runs_dir.exists():
+            continue
+        run_count = len(list(runs_dir.glob("*.json")))
+        if run_count <= 0:
+            continue
+        latest = load_latest_run(directory.name)
+        users.append(
+            {
+                "user_id": directory.name,
+                "run_count": run_count,
+                "latest_run_id": latest.get("run_id") if latest else None,
+                "latest_updated_at": latest.get("updated_at") if latest else None,
+            }
+        )
+    return users
+
+
+def list_runs(user_id: str | None = None, limit: int = 30) -> list[dict[str, Any]]:
+    directory = user_runs_dir(user_id)
+    if not directory.exists():
+        return []
+
+    rows: list[dict[str, Any]] = []
+    candidates = sorted(directory.glob("*.json"), key=lambda path: path.stat().st_mtime, reverse=True)
+    for path in candidates[:limit]:
+        try:
+            record = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(record, dict):
+            continue
+        rows.append(
+            {
+                "run_id": record.get("run_id"),
+                "status": record.get("status"),
+                "ticker": record.get("ticker"),
+                "company_name": record.get("company_name"),
+                "horizon": record.get("horizon"),
+                "rating": record.get("rating"),
+                "confidence": record.get("confidence"),
+                "user_query": record.get("user_query"),
+                "created_at": record.get("created_at"),
+                "updated_at": record.get("updated_at"),
+                "event_count": len(record.get("events") or []),
+            }
+        )
+    return rows
+
+
+def run_dashboard_payload(user_id: str | None = None, run_id: str | None = None) -> dict[str, Any]:
+    safe_id = safe_user_id(user_id)
+    run = load_run(safe_id, run_id)
+    return {
+        "user_id": safe_id,
+        "users": list_run_users(),
+        "runs": list_runs(safe_id),
+        "run": run,
+        "agent_flow": [
+            {"node": node, "name": name, "role": role, "mission": mission}
+            for node, name, role, mission in AGENT_FLOW
+        ],
+    }
 
 
 def create_run_record(user_id: str | None, user_query: str) -> dict[str, Any]:

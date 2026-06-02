@@ -303,9 +303,12 @@
 当前实现：
 
 - 使用 `financial_agent/tools/run_dashboard.py` 管理 run 记录
+- 使用 `financial_agent/dashboard_server.py` 提供独立本地看板服务
+- `dashboard/` 目录提供原生 HTML/CSS/JS 前端，不依赖额外前端框架
 - 每次 Chainlit 分析创建 `run_id`，并写入 `outputs/users/{user_id}/runs/*.json`
 - LangGraph 每个节点完成后追加 event：node、agent_name、role、summary、finished_at、关键输出
 - Chainlit 运行中实时更新 “Multi-Agent 协作看板”
+- 独立看板展示顶部指标、Agent 协作队列、Agent 详情、协作时间线和多空辩论区
 - 分析完成后提供快捷按钮：Agent 看板、多空辩论、打开报告、重新分析
 - 支持直接输入 `Agent 看板`、`协作看板`、`多空辩论` 查看最近一次 run
 
