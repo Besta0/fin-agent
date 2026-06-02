@@ -338,6 +338,7 @@ dashboard
 - 把每个 Agent 的完成状态、角色、摘要和关键输出写入本地 JSON
 - 在 Chainlit 中渲染“Multi-Agent 协作看板”，让用户看到不同 Agent 像团队成员一样工作
 - 提供独立前端看板：顶部指标、Agent 卡片、详情面板、协作时间线和多空辩论区
+- 独立看板支持直接输入研究问题并启动 LangGraph 分析，随后自动切到新 run 并轮询刷新
 - 提供“多空辩论区”，集中展示 Bull Agent、Bear Agent 和 Committee Agent 的观点分歧与裁决
 - 分析完成后提供快捷按钮：Agent 看板、多空辩论、打开报告、重新分析
 - run 文件保存到 `outputs/users/{user_id}/runs/*.json`，不会进入 git
@@ -741,6 +742,14 @@ python -m financial_agent.dashboard_server --host 127.0.0.1 --port 8001
 ```text
 http://localhost:8001
 ```
+
+在独立看板里输入问题，例如：
+
+```text
+帮我分析一下 NVDA 未来一个月走势
+```
+
+点击 **启动研究** 后，页面会自动进入新的 run，看每个 Agent 逐步完成。
 
 命令行测试：
 

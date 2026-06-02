@@ -31,7 +31,8 @@ body {
 }
 
 button,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -56,6 +57,25 @@ select {
   background: var(--surface);
   color: var(--text);
   padding: 0 10px;
+}
+
+textarea {
+  width: 100%;
+  min-height: 58px;
+  resize: vertical;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 10px 12px;
+  line-height: 1.5;
+}
+
+textarea:focus,
+select:focus,
+button:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, 0.16);
+  outline-offset: 2px;
 }
 
 .app-shell {
@@ -118,11 +138,25 @@ h3 {
 
 .summary-band,
 .run-context,
+.launch-panel,
 .panel {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--surface);
   box-shadow: var(--shadow);
+}
+
+.launch-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px minmax(210px, 0.42fr);
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+}
+
+.launch-panel button {
+  width: 100%;
 }
 
 .summary-band {
@@ -414,6 +448,7 @@ code {
 
   .summary-band,
   .run-context,
+  .launch-panel,
   .agent-grid {
     grid-template-columns: 1fr;
   }

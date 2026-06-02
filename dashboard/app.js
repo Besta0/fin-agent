@@ -25,6 +25,9 @@ const els = {
   userSelect: document.getElementById("userSelect"),
   runSelect: document.getElementById("runSelect"),
   refreshBtn: document.getElementById("refreshBtn"),
+  queryInput: document.getElementById("queryInput"),
+  startRunBtn: document.getElementById("startRunBtn"),
+  launchStatus: document.getElementById("launchStatus"),
   tickerMetric: document.getElementById("tickerMetric"),
   statusMetric: document.getElementById("statusMetric"),
   ratingMetric: document.getElementById("ratingMetric"),
@@ -71,6 +74,14 @@ function bindEvents() {
   });
 
   els.refreshBtn.addEventListener("click", loadPayload);
+
+  els.startRunBtn.addEventListener("click", startRun);
+  els.queryInput.addEventListener("keydown", async (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+      event.preventDefault();
+      await startRun();
+    }
+  });
 }
 
 async function loadUsers() {
@@ -116,6 +127,49 @@ async function getJson(url) {
     throw new Error(`Request failed: ${response.status}`);
   }
   return response.json();
+}
+
+async function postJson(url, payload) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || `Request failed: ${response.status}`);
+  }
+  return data;
+}
+
+async function startRun() {
+  const query = els.queryInput.value.trim();
+  if (!query) {
+    els.launchStatus.textContent = "请输入一个股票研究问题。";
+    return;
+  }
+
+  els.startRunBtn.disabled = true;
+  els.startRunBtn.textContent = "启动中";
+  els.launchStatus.textContent = "正在创建 run，并启动多 Agent 工作流...";
+  try {
+    const data = await postJson("/api/run/start", {
+      user_id: state.userId || "chainlit",
+      query,
+    });
+    state.userId = data.user_id;
+    state.runId = data.run_id;
+    localStorage.setItem("finAgentDashboardUser", state.userId);
+    els.queryInput.value = "";
+    els.launchStatus.textContent = `已启动 run ${data.run_id}，看板会自动刷新。`;
+    await loadUsers();
+    await loadPayload();
+  } catch (error) {
+    els.launchStatus.textContent = `启动失败：${error.message}`;
+  } finally {
+    els.startRunBtn.disabled = false;
+    els.startRunBtn.textContent = "启动研究";
+  }
 }
 
 function renderRunOptions() {
@@ -171,7 +225,7 @@ function renderEmpty(flow) {
   els.ratingMetric.textContent = "待投委会";
   els.confidenceMetric.textContent = "N/A";
   els.progressMetric.textContent = `0/${flow.length || 14}`;
-  els.queryText.textContent = "还没有运行记录。先在 Chainlit 里发起一次投研分析。";
+  els.queryText.textContent = "还没有运行记录。可以在上方输入研究问题并启动一次多 Agent 分析。";
   els.runIdText.textContent = "N/A";
   els.updatedText.textContent = "N/A";
   els.agentGrid.innerHTML = `<div class="empty">暂无 Agent 运行记录。</div>`;

@@ -249,6 +249,102 @@ def _truncate_text(text: str, limit: int = 600) -> str:
     return value[: limit - 3] + "..."
 
 
+def summarize_run_update(node_name: str, update: dict[str, Any]) -> str:
+    if node_name == "coordinator":
+        direct_response = update.get("direct_response")
+        if direct_response:
+            return _truncate_text(str(direct_response), 220)
+        ticker = update.get("ticker") or "未识别"
+        horizon = update.get("horizon") or "默认周期"
+        resolution = update.get("ticker_resolution") or {}
+        method = resolution.get("method") or "rules"
+        confidence = resolution.get("confidence")
+        confidence_text = f"；置信度：{confidence:.0%}" if isinstance(confidence, (int, float)) else ""
+        return f"已识别标的：{ticker}；分析周期：{horizon}；识别方式：{method}{confidence_text}。"
+
+    if node_name == "memory":
+        memory = update.get("memory_context") or {}
+        guidance = memory.get("memory_guidance") or {}
+        updates = "；".join(memory.get("preference_updates") or []) or "无新增偏好"
+        return (
+            f"已加载用户记忆。偏好更新：{updates}；"
+            f"同标的历史：{len(memory.get('ticker_history') or [])} 条；"
+            f"语义相似记忆：{len(memory.get('semantic_memories') or [])} 条；"
+            f"关注点：{', '.join(guidance.get('focus_points') or []) or '暂无'}。"
+        )
+
+    if node_name == "market":
+        market = update.get("market_data") or {}
+        if not market.get("ok"):
+            return f"行情数据获取失败：{market.get('error', '未知错误')}"
+        return (
+            f"已获取行情数据。最新收盘价：{market.get('last_close')}；"
+            f"近 1 日涨跌幅：{(market.get('returns') or {}).get('1d')}%。"
+        )
+
+    if node_name == "review":
+        review = update.get("review") or {}
+        return review.get("summary") or "历史复盘完成。"
+
+    if node_name == "technical":
+        tech = update.get("technicals") or {}
+        return (
+            f"技术面判断：{tech.get('trend_label', '暂无判断')}；"
+            f"RSI：{tech.get('rsi_14', 'N/A')}；"
+            f"MACD：{tech.get('macd_signal_label', 'N/A')}。"
+        )
+
+    if node_name == "fundamental":
+        fundamentals = update.get("fundamentals") or {}
+        if not fundamentals.get("ok"):
+            return f"基本面数据获取失败：{fundamentals.get('error', '未知错误')}"
+        return (
+            f"基本面完成。行业：{fundamentals.get('sector') or 'N/A'} / "
+            f"{fundamentals.get('industry') or 'N/A'}；"
+            f"PE：{fundamentals.get('trailing_pe') or 'N/A'}；"
+            f"亮点：{len(fundamentals.get('highlights') or [])} 条。"
+        )
+
+    if node_name == "news_risk":
+        return f"已整理 {len(update.get('news') or [])} 条新闻线索和 {len(update.get('risks') or [])} 条主要风险。"
+
+    if node_name == "bull":
+        case = update.get("bull_case") or {}
+        return f"看多观点完成。置信度：{case.get('confidence', 'N/A')}%；{case.get('summary') or '暂无摘要'}"
+
+    if node_name == "bear":
+        case = update.get("bear_case") or {}
+        return f"看空观点完成。置信度：{case.get('confidence', 'N/A')}%；{case.get('summary') or '暂无摘要'}"
+
+    if node_name == "committee":
+        view = update.get("committee_view") or {}
+        return f"投委会结论：{view.get('rating', 'N/A')}；置信度：{view.get('confidence', 'N/A')}%。"
+
+    if node_name == "portfolio":
+        portfolio = update.get("portfolio") or {}
+        return (
+            f"观察池更新完成。优先级：{portfolio.get('priority_label', 'N/A')} "
+            f"({portfolio.get('priority_score', 'N/A')}/100)；"
+            f"角色：{portfolio.get('portfolio_role', 'N/A')}。"
+        )
+
+    if node_name == "report":
+        return "中文投研报告已生成。"
+
+    if node_name == "verifier":
+        verification = update.get("verification") or {}
+        return (
+            f"质量检查状态：{verification.get('status', 'unknown')}；"
+            f"发现问题：{len(verification.get('issues') or [])} 个。"
+        )
+
+    if node_name == "history":
+        record = update.get("history_record") or {}
+        return f"历史记录已保存：{record.get('history_path', 'N/A')}"
+
+    return "节点已完成。"
+
+
 def _event_output(node_name: str, update: dict[str, Any]) -> dict[str, Any]:
     if node_name == "coordinator":
         return {
