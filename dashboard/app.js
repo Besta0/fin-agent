@@ -9,6 +9,8 @@ const state = {
   reportKey: "",
   compare: null,
   compareKey: "",
+  watchlist: null,
+  watchlistKey: "",
   refreshTimer: null,
 };
 
@@ -57,6 +59,9 @@ const els = {
   bearArgs: document.getElementById("bearArgs"),
   committeeSummary: document.getElementById("committeeSummary"),
   committeeArgs: document.getElementById("committeeArgs"),
+  watchlistStatus: document.getElementById("watchlistStatus"),
+  watchlistSummary: document.getElementById("watchlistSummary"),
+  watchlistGrid: document.getElementById("watchlistGrid"),
   compareStatus: document.getElementById("compareStatus"),
   compareSummary: document.getElementById("compareSummary"),
   compareTable: document.getElementById("compareTable"),
@@ -136,6 +141,7 @@ async function loadPayload() {
   renderRunOptions();
   syncUrl();
   renderDashboard();
+  await syncWatchlistForCurrentUser();
   await syncCompareForCurrentRun();
   await syncReportForCurrentRun();
 }
@@ -257,6 +263,26 @@ async function syncCompareForCurrentRun() {
   }
 }
 
+async function syncWatchlistForCurrentUser() {
+  try {
+    const data = await getJson(`/api/watchlist?${new URLSearchParams({ user_id: state.userId }).toString()}`);
+    if (!data.ok) {
+      state.watchlist = null;
+      state.watchlistKey = "";
+      renderWatchlistPanel(data);
+      return;
+    }
+    const watchlistKey = `${state.userId}:${data.updated_at || ""}:${data.total || 0}`;
+    state.watchlist = data;
+    state.watchlistKey = watchlistKey;
+    renderWatchlistPanel();
+  } catch (error) {
+    state.watchlist = null;
+    state.watchlistKey = "";
+    renderWatchlistPanel({ ok: false, message: `读取观察池失败：${error.message}` });
+  }
+}
+
 async function startRun() {
   const query = els.queryInput.value.trim();
   if (!query) {
@@ -278,6 +304,8 @@ async function startRun() {
     state.reportKey = "";
     state.compare = null;
     state.compareKey = "";
+    state.watchlist = null;
+    state.watchlistKey = "";
     localStorage.setItem("finAgentDashboardUser", state.userId);
     els.queryInput.value = "";
     els.launchStatus.textContent = `已启动 run ${data.run_id}，看板会自动刷新。`;
@@ -454,6 +482,94 @@ function renderDebate(eventByNode, run) {
     ? `${committee.rating}，置信度 ${committee.confidence || "N/A"}%。`
     : "等待投委会裁决。";
   els.committeeArgs.innerHTML = renderList("关键依据", committee.key_reasons, "不确定性", committee.uncertainty ? [committee.uncertainty] : []);
+}
+
+function renderWatchlistPanel(payload = null) {
+  const watchlist = state.watchlist;
+  if (!watchlist) {
+    els.watchlistStatus.textContent = "暂无数据";
+    els.watchlistSummary.innerHTML = "";
+    els.watchlistGrid.innerHTML = `<div class="empty">${escapeHtml(payload?.message || "完成一次研究后，Portfolio Agent 会自动把标的加入观察池。")}</div>`;
+    return;
+  }
+
+  const items = watchlist.items || [];
+  els.watchlistStatus.textContent = `${watchlist.total || 0} tickers / ${watchlist.updated_at || "尚未更新"}`;
+  els.watchlistSummary.innerHTML = renderWatchlistSummary(watchlist);
+  if (items.length === 0) {
+    els.watchlistGrid.innerHTML = `<div class="empty">观察池还是空的。先启动一次研究，系统会自动计算优先级。</div>`;
+    return;
+  }
+
+  els.watchlistGrid.innerHTML = items
+    .slice(0, 8)
+    .map((item) => renderWatchlistCard(item))
+    .join("");
+  document.querySelectorAll("[data-watchlist-query]").forEach((button) => {
+    button.addEventListener("click", () => {
+      els.queryInput.value = button.getAttribute("data-watchlist-query") || "";
+      els.launchStatus.textContent = "已填入复盘问题，可以直接启动研究。";
+      els.queryInput.focus();
+    });
+  });
+}
+
+function renderWatchlistSummary(watchlist) {
+  const stats = [
+    ["标的总数", watchlist.total || 0],
+    ["核心跟踪", watchlist.core_count || 0],
+    ["高优先级以上", watchlist.high_count || 0],
+    ["风险警戒", watchlist.risk_count || 0],
+  ];
+  return stats
+    .map(
+      ([label, value]) => `
+        <div class="watchlist-stat">
+          <span class="metric-label">${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function renderWatchlistCard(item) {
+  const ticker = item.ticker || "N/A";
+  const query = `帮我重新分析 ${ticker}，重点看估值压力和观点变化`;
+  const reason = Array.isArray(item.watch_reasons) && item.watch_reasons.length > 0
+    ? item.watch_reasons[0]
+    : "暂无明确跟踪理由。";
+  return `
+    <article class="watchlist-card">
+      <header>
+        <div>
+          <h3>${escapeHtml(ticker)}</h3>
+          <p class="muted">${escapeHtml(item.company_name || item.sector || "N/A")}</p>
+        </div>
+        <span class="watchlist-score">${valueOrNA(item.priority_score)}</span>
+      </header>
+      <div class="watchlist-meta">
+        <div>
+          <span class="metric-label">优先级</span>
+          <strong>${escapeHtml(item.priority_label || "N/A")}</strong>
+        </div>
+        <div>
+          <span class="metric-label">角色</span>
+          <strong>${escapeHtml(item.portfolio_role || "N/A")}</strong>
+        </div>
+        <div>
+          <span class="metric-label">评级</span>
+          <strong>${escapeHtml(item.rating || "N/A")} / ${valueOrNA(item.confidence, "%")}</strong>
+        </div>
+        <div>
+          <span class="metric-label">近 1 月</span>
+          <strong class="${trendClass(item.return_1m)}">${valueOrNA(item.return_1m, "%")}</strong>
+        </div>
+      </div>
+      <p class="watchlist-reason">${escapeHtml(reason)}</p>
+      <button class="watchlist-action" type="button" data-watchlist-query="${escapeAttribute(query)}">复盘</button>
+    </article>
+  `;
 }
 
 function renderComparePanel(payload = null) {

@@ -32,6 +32,7 @@ from financial_agent.tools.run_dashboard import (
     run_dashboard_payload,
     summarize_run_update,
 )
+from financial_agent.tools.watchlist import load_watchlist
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -117,6 +118,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         if path == "/api/compare":
             self._send_json(_compare_payload(user_id, run_id or None))
+            return
+
+        if path == "/api/watchlist":
+            self._send_json(_watchlist_payload(user_id))
             return
 
         if path.startswith("/api/run/"):
@@ -368,6 +373,48 @@ def _pct_delta(current, previous) -> float | None:
     if current_value is None or previous_value in {None, 0}:
         return None
     return (current_value - previous_value) / previous_value * 100
+
+
+def _watchlist_payload(user_id: str) -> dict:
+    watchlist = load_watchlist(user_id)
+    items = watchlist.get("items") or []
+    core_count = sum(1 for item in items if item.get("priority_label") == "核心跟踪")
+    high_count = sum(1 for item in items if item.get("priority_label") in {"核心跟踪", "高优先级"})
+    risk_count = sum(1 for item in items if item.get("priority_label") == "风险警戒")
+    return {
+        "ok": True,
+        "user_id": user_id,
+        "updated_at": watchlist.get("updated_at"),
+        "total": len(items),
+        "core_count": core_count,
+        "high_count": high_count,
+        "risk_count": risk_count,
+        "items": [_watchlist_item_payload(item) for item in items[:12]],
+    }
+
+
+def _watchlist_item_payload(item: dict) -> dict:
+    returns = item.get("returns") or {}
+    return {
+        "ticker": item.get("ticker"),
+        "company_name": item.get("company_name"),
+        "market": item.get("market"),
+        "sector": item.get("sector"),
+        "industry": item.get("industry"),
+        "price": _number_or_none(item.get("price")),
+        "rating": item.get("rating"),
+        "confidence": _number_or_none(item.get("confidence")),
+        "priority_score": _number_or_none(item.get("priority_score")),
+        "priority_label": item.get("priority_label"),
+        "portfolio_role": item.get("portfolio_role"),
+        "risk_count": item.get("risk_count"),
+        "news_count": item.get("news_count"),
+        "return_1d": _number_or_none(returns.get("1d")),
+        "return_5d": _number_or_none(returns.get("5d")),
+        "return_1m": _number_or_none(returns.get("1m")),
+        "watch_reasons": item.get("watch_reasons") or [],
+        "updated_at": item.get("updated_at"),
+    }
 
 
 def _run_research_in_background(user_id: str, run_id: str, query: str) -> None:
