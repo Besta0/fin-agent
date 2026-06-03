@@ -7,6 +7,8 @@ const state = {
   payload: null,
   report: null,
   reportKey: "",
+  compare: null,
+  compareKey: "",
   refreshTimer: null,
 };
 
@@ -55,6 +57,9 @@ const els = {
   bearArgs: document.getElementById("bearArgs"),
   committeeSummary: document.getElementById("committeeSummary"),
   committeeArgs: document.getElementById("committeeArgs"),
+  compareStatus: document.getElementById("compareStatus"),
+  compareSummary: document.getElementById("compareSummary"),
+  compareTable: document.getElementById("compareTable"),
   reportStatus: document.getElementById("reportStatus"),
   reloadReportBtn: document.getElementById("reloadReportBtn"),
   reportMeta: document.getElementById("reportMeta"),
@@ -131,6 +136,7 @@ async function loadPayload() {
   renderRunOptions();
   syncUrl();
   renderDashboard();
+  await syncCompareForCurrentRun();
   await syncReportForCurrentRun();
 }
 
@@ -213,6 +219,44 @@ async function loadReport({ force = false } = {}) {
   }
 }
 
+async function syncCompareForCurrentRun() {
+  const run = state.payload?.run;
+  if (!run || !run.ticker) {
+    state.compare = null;
+    state.compareKey = "";
+    renderComparePanel();
+    return;
+  }
+
+  const compareKey = `${state.userId}:${run.run_id}:${run.updated_at || ""}:${(run.events || []).length}`;
+  if (state.compareKey === compareKey && state.compare) {
+    renderComparePanel();
+    return;
+  }
+
+  const params = new URLSearchParams({ user_id: state.userId });
+  if (run.run_id) {
+    params.set("run_id", run.run_id);
+  }
+
+  try {
+    const data = await getJson(`/api/compare?${params.toString()}`);
+    if (!data.ok) {
+      state.compare = null;
+      state.compareKey = "";
+      renderComparePanel(data);
+      return;
+    }
+    state.compare = data;
+    state.compareKey = compareKey;
+    renderComparePanel();
+  } catch (error) {
+    state.compare = null;
+    state.compareKey = "";
+    renderComparePanel({ ok: false, message: `读取对比失败：${error.message}` });
+  }
+}
+
 async function startRun() {
   const query = els.queryInput.value.trim();
   if (!query) {
@@ -232,6 +276,8 @@ async function startRun() {
     state.runId = data.run_id;
     state.report = null;
     state.reportKey = "";
+    state.compare = null;
+    state.compareKey = "";
     localStorage.setItem("finAgentDashboardUser", state.userId);
     els.queryInput.value = "";
     els.launchStatus.textContent = `已启动 run ${data.run_id}，看板会自动刷新。`;
@@ -408,6 +454,116 @@ function renderDebate(eventByNode, run) {
     ? `${committee.rating}，置信度 ${committee.confidence || "N/A"}%。`
     : "等待投委会裁决。";
   els.committeeArgs.innerHTML = renderList("关键依据", committee.key_reasons, "不确定性", committee.uncertainty ? [committee.uncertainty] : []);
+}
+
+function renderComparePanel(payload = null) {
+  const run = state.payload?.run;
+  const compare = state.compare;
+
+  if (!run) {
+    els.compareStatus.textContent = "暂无 run";
+    els.compareSummary.innerHTML = `<div class="empty">先启动一次研究，历史对比会自动出现。</div>`;
+    els.compareTable.innerHTML = "";
+    return;
+  }
+
+  if (!compare) {
+    els.compareStatus.textContent = run.ticker ? "等待历史" : "等待 ticker";
+    els.compareSummary.innerHTML = `<div class="empty">${escapeHtml(payload?.message || "当前 run 暂时没有可对比数据。")}</div>`;
+    els.compareTable.innerHTML = "";
+    return;
+  }
+
+  const current = compare.current || {};
+  const previous = compare.previous || {};
+  const changes = compare.changes || {};
+  els.compareStatus.textContent = `${compare.ticker || run.ticker || "N/A"} / ${compare.runs?.length || 0} runs`;
+  els.compareSummary.innerHTML = renderCompareCards(current, previous, changes);
+  els.compareTable.innerHTML = renderCompareTable(compare.runs || []);
+}
+
+function renderCompareCards(current, previous, changes) {
+  if (!changes.has_previous) {
+    return `
+      <div class="empty">${escapeHtml(changes.summary || "当前标的还没有更早的历史 run。")}</div>
+    `;
+  }
+  return [
+    {
+      label: "结论变化",
+      value: `${previous.rating || "N/A"} -> ${current.rating || "N/A"}`,
+      detail: changes.rating_changed ? "投委会观点发生变化" : "投委会观点保持一致",
+      trend: changes.rating_changed ? "trend-up" : "trend-flat",
+    },
+    {
+      label: "置信度",
+      value: `${valueOrNA(current.confidence, "%")} (${formatDelta(changes.confidence_delta, "点")})`,
+      detail: `上一 run：${valueOrNA(previous.confidence, "%")}`,
+      trend: trendClass(changes.confidence_delta),
+    },
+    {
+      label: "最新收盘价",
+      value: `${valueOrNA(current.last_close)} (${formatDelta(changes.last_close_delta_pct, "%")})`,
+      detail: `上一 run：${valueOrNA(previous.last_close)}`,
+      trend: trendClass(changes.last_close_delta),
+    },
+    {
+      label: "近 1 月表现",
+      value: `${valueOrNA(current.return_1m, "%")} (${formatDelta(changes.return_1m_delta, "点")})`,
+      detail: `上一 run：${valueOrNA(previous.return_1m, "%")}`,
+      trend: trendClass(changes.return_1m_delta),
+    },
+  ]
+    .map(
+      (item) => `
+        <div class="compare-card">
+          <span class="metric-label">${escapeHtml(item.label)}</span>
+          <strong class="${item.trend}">${escapeHtml(item.value)}</strong>
+          <p>${escapeHtml(item.detail)}</p>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function renderCompareTable(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return `<div class="empty">没有历史 run。</div>`;
+  }
+  const body = rows
+    .map(
+      (row) => `
+        <tr class="${row.is_current ? "current-run" : ""}">
+          <td>
+            <a href="/?user_id=${escapeAttribute(state.userId)}&run_id=${escapeAttribute(row.run_id || "")}">${escapeHtml(row.run_id || "N/A")}</a>
+            ${row.is_current ? '<span class="badge running">当前</span>' : ""}
+          </td>
+          <td>${escapeHtml(row.updated_at || "N/A")}</td>
+          <td>${escapeHtml(row.rating || "N/A")} / ${valueOrNA(row.confidence, "%")}</td>
+          <td>${valueOrNA(row.last_close)}<br><span class="muted">1D ${valueOrNA(row.return_1d, "%")} / 1M ${valueOrNA(row.return_1m, "%")}</span></td>
+          <td>${escapeHtml(stripMarkdown(row.bull_summary || row.technical_summary || "N/A"))}</td>
+          <td>${escapeHtml(stripMarkdown(row.bear_summary || row.committee_summary || "N/A"))}</td>
+          <td>${row.report_path ? "已生成" : "尚未生成"}<br><span class="muted">${escapeHtml(`${row.event_count || 0} events`)}</span></td>
+        </tr>
+      `,
+    )
+    .join("");
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>Run</th>
+          <th>更新时间</th>
+          <th>结论 / 置信度</th>
+          <th>价格表现</th>
+          <th>看多或技术理由</th>
+          <th>看空或裁决理由</th>
+          <th>报告</th>
+        </tr>
+      </thead>
+      <tbody>${body}</tbody>
+    </table>
+  `;
 }
 
 function renderReportPanel(pendingPayload = null) {
@@ -695,6 +851,38 @@ function renderInline(text) {
   return output
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+}
+
+function valueOrNA(value, suffix = "") {
+  if (value === null || value === undefined || value === "") {
+    return "N/A";
+  }
+  const number = Number(value);
+  if (Number.isFinite(number)) {
+    const precision = Math.abs(number) >= 100 ? 2 : 2;
+    return `${number.toFixed(precision).replace(/\.00$/, "")}${suffix}`;
+  }
+  return `${escapeHtml(String(value))}${suffix}`;
+}
+
+function formatDelta(value, unit = "") {
+  if (value === null || value === undefined || value === "") {
+    return "N/A";
+  }
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return "N/A";
+  }
+  const sign = number > 0 ? "+" : "";
+  return `${sign}${number.toFixed(2).replace(/\.00$/, "")}${unit}`;
+}
+
+function trendClass(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number === 0) {
+    return "trend-flat";
+  }
+  return number > 0 ? "trend-up" : "trend-down";
 }
 
 function statusForNode(run, node, event) {

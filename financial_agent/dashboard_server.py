@@ -115,6 +115,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._send_json(_report_payload(user_id, run_id or None))
             return
 
+        if path == "/api/compare":
+            self._send_json(_compare_payload(user_id, run_id or None))
+            return
+
         if path.startswith("/api/run/"):
             requested_run_id = path.removeprefix("/api/run/").strip("/")
             run = load_run(user_id, requested_run_id)
@@ -233,6 +237,137 @@ def _report_run_summary(run: dict) -> dict:
         "confidence": run.get("confidence"),
         "report_path": run.get("report_path"),
     }
+
+
+def _compare_payload(user_id: str, run_id: str | None) -> dict:
+    current = load_run(user_id, run_id)
+    if not current:
+        return {"ok": False, "status": "missing_run", "message": "没有找到对应 run。"}
+
+    ticker = str(current.get("ticker") or "").upper()
+    if not ticker:
+        return {"ok": False, "status": "missing_ticker", "message": "当前 run 尚未识别 ticker。"}
+
+    rows = []
+    for summary in list_runs(user_id, limit=80):
+        if str(summary.get("ticker") or "").upper() != ticker:
+            continue
+        full_run = load_run(user_id, str(summary.get("run_id") or ""))
+        if full_run:
+            rows.append(_compare_row(full_run, current_run_id=str(current.get("run_id") or "")))
+
+    rows.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
+    current_row = next((row for row in rows if row.get("is_current")), _compare_row(current, current_run_id=str(current.get("run_id") or "")))
+    current_index = next((idx for idx, row in enumerate(rows) if row.get("is_current")), -1)
+    previous_row = rows[current_index + 1] if current_index >= 0 and current_index + 1 < len(rows) else None
+    changes = _compare_changes(current_row, previous_row)
+
+    return {
+        "ok": True,
+        "user_id": user_id,
+        "ticker": ticker,
+        "current_run_id": current.get("run_id"),
+        "current": current_row,
+        "previous": previous_row,
+        "changes": changes,
+        "runs": rows[:12],
+        "message": "找到可对比历史。" if previous_row else "当前标的还没有更早的历史 run。",
+    }
+
+
+def _compare_row(run: dict, current_run_id: str) -> dict:
+    events = {event.get("node"): event for event in run.get("events") or []}
+    market = (events.get("market") or {}).get("output") or {}
+    technical = events.get("technical") or {}
+    fundamental = (events.get("fundamental") or {}).get("output") or {}
+    bull = events.get("bull") or {}
+    bear = events.get("bear") or {}
+    committee = (events.get("committee") or {}).get("output") or {}
+    returns = market.get("returns") or {}
+    return {
+        "run_id": run.get("run_id"),
+        "is_current": run.get("run_id") == current_run_id,
+        "status": run.get("status"),
+        "ticker": run.get("ticker"),
+        "company_name": run.get("company_name"),
+        "horizon": run.get("horizon"),
+        "rating": run.get("rating"),
+        "confidence": _number_or_none(run.get("confidence")),
+        "last_close": _number_or_none(market.get("last_close")),
+        "return_1d": _number_or_none(returns.get("1d")),
+        "return_1m": _number_or_none(returns.get("1m")),
+        "technical_summary": technical.get("summary") or "",
+        "bull_summary": bull.get("summary") or "",
+        "bear_summary": bear.get("summary") or "",
+        "committee_summary": committee.get("rating") or run.get("rating") or "",
+        "fundamental_pe": _number_or_none(fundamental.get("trailing_pe")),
+        "report_path": run.get("report_path"),
+        "user_query": run.get("user_query"),
+        "updated_at": run.get("updated_at"),
+        "event_count": len(run.get("events") or []),
+    }
+
+
+def _compare_changes(current: dict | None, previous: dict | None) -> dict:
+    if not current or not previous:
+        return {
+            "has_previous": False,
+            "summary": "暂无可对比的更早 run。",
+            "items": [],
+        }
+
+    items = []
+    if current.get("rating") != previous.get("rating"):
+        items.append(f"结论从 {previous.get('rating') or 'N/A'} 变为 {current.get('rating') or 'N/A'}。")
+    else:
+        items.append(f"结论维持 {current.get('rating') or 'N/A'}。")
+
+    confidence_delta = _delta(current.get("confidence"), previous.get("confidence"))
+    if confidence_delta is not None:
+        items.append(f"置信度变化 {confidence_delta:+.0f} 个百分点。")
+
+    close_delta = _delta(current.get("last_close"), previous.get("last_close"))
+    close_delta_pct = _pct_delta(current.get("last_close"), previous.get("last_close"))
+    if close_delta is not None and close_delta_pct is not None:
+        items.append(f"最新收盘价变化 {close_delta:+.2f}（{close_delta_pct:+.2f}%）。")
+
+    return_1m_delta = _delta(current.get("return_1m"), previous.get("return_1m"))
+    if return_1m_delta is not None:
+        items.append(f"近 1 月涨跌幅变化 {return_1m_delta:+.2f} 个百分点。")
+
+    return {
+        "has_previous": True,
+        "summary": " ".join(items),
+        "items": items,
+        "confidence_delta": confidence_delta,
+        "last_close_delta": close_delta,
+        "last_close_delta_pct": close_delta_pct,
+        "return_1m_delta": return_1m_delta,
+        "rating_changed": current.get("rating") != previous.get("rating"),
+    }
+
+
+def _number_or_none(value) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _delta(current, previous) -> float | None:
+    current_value = _number_or_none(current)
+    previous_value = _number_or_none(previous)
+    if current_value is None or previous_value is None:
+        return None
+    return current_value - previous_value
+
+
+def _pct_delta(current, previous) -> float | None:
+    current_value = _number_or_none(current)
+    previous_value = _number_or_none(previous)
+    if current_value is None or previous_value in {None, 0}:
+        return None
+    return (current_value - previous_value) / previous_value * 100
 
 
 def _run_research_in_background(user_id: str, run_id: str, query: str) -> None:

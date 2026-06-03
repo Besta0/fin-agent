@@ -211,6 +211,92 @@ h3 {
   border-right: 0;
 }
 
+.compare-panel {
+  margin-bottom: 16px;
+}
+
+.compare-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.compare-summary .empty {
+  grid-column: 1 / -1;
+}
+
+.compare-card {
+  min-height: 86px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.compare-card strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 18px;
+}
+
+.compare-card p {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.compare-table {
+  overflow: auto;
+}
+
+.compare-table table {
+  width: 100%;
+  min-width: 920px;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.compare-table th,
+.compare-table td {
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.compare-table th {
+  background: var(--surface-soft);
+  color: var(--muted);
+  text-align: left;
+  font-size: 12px;
+}
+
+.compare-table tr.current-run td {
+  background: var(--blue-soft);
+}
+
+.compare-table a {
+  color: var(--blue);
+  text-decoration: none;
+}
+
+.compare-table a:hover {
+  text-decoration: underline;
+}
+
+.trend-up {
+  color: var(--teal);
+}
+
+.trend-down {
+  color: var(--red);
+}
+
+.trend-flat {
+  color: var(--muted);
+}
+
 code {
   display: inline-block;
   max-width: 100%;
@@ -595,6 +681,10 @@ code {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .compare-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .report-meta {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -622,6 +712,7 @@ code {
   .summary-band,
   .run-context,
   .launch-panel,
+  .compare-summary,
   .report-meta,
   .agent-grid {
     grid-template-columns: 1fr;
