@@ -22,6 +22,7 @@
             Run
             <select id="runSelect"></select>
           </label>
+          <button id="settingsToggleBtn" class="secondary-button" type="button">模型设置</button>
           <button id="refreshBtn" type="button">刷新</button>
         </div>
       </header>
@@ -34,6 +35,52 @@
           </div>
           <button id="startRunBtn" type="button">启动研究</button>
           <p id="launchStatus" class="muted">在这里直接发起一次多 Agent 分析，看板会自动切到新 run。</p>
+        </section>
+
+        <section id="settingsPanel" class="panel settings-panel is-hidden">
+          <div class="panel-title">
+            <div>
+              <h2>模型设置</h2>
+              <p id="settingsCurrentLine" class="muted">读取当前用户配置中。</p>
+            </div>
+            <span id="settingsStatus">等待配置</span>
+          </div>
+          <div class="settings-grid">
+            <label class="field">
+              <span>Provider</span>
+              <select id="settingsProvider"></select>
+            </label>
+            <label class="field">
+              <span>模型</span>
+              <select id="settingsModel"></select>
+            </label>
+            <label class="field">
+              <span>自定义模型</span>
+              <input id="settingsCustomModel" type="text" placeholder="例如 custom-model" autocomplete="off" />
+            </label>
+            <label class="field field-wide">
+              <span>Base URL</span>
+              <input id="settingsBaseUrl" type="url" placeholder="https://api.example.com/v1" autocomplete="off" />
+            </label>
+            <label class="field field-wide">
+              <span>API Key</span>
+              <input id="settingsApiKey" type="password" placeholder="留空则继续使用当前 key" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>Temperature</span>
+              <div class="temperature-control">
+                <input id="settingsTemperature" type="range" min="0" max="1" step="0.05" value="0.2" />
+                <output id="settingsTemperatureValue">0.20</output>
+              </div>
+            </label>
+          </div>
+          <div class="settings-footer">
+            <p id="settingsKeyStatus" class="muted">API Key：未配置</p>
+            <div class="settings-actions">
+              <button id="testSettingsBtn" class="secondary-button" type="button">测试连接</button>
+              <button id="saveSettingsBtn" type="button">保存配置</button>
+            </div>
+          </div>
         </section>
 
         <section class="summary-band">

@@ -11,6 +11,8 @@ const state = {
   compareKey: "",
   watchlist: null,
   watchlistKey: "",
+  settings: null,
+  settingsOpen: localStorage.getItem("finAgentSettingsOpen") === "true",
   refreshTimer: null,
 };
 
@@ -33,9 +35,23 @@ const els = {
   userSelect: document.getElementById("userSelect"),
   runSelect: document.getElementById("runSelect"),
   refreshBtn: document.getElementById("refreshBtn"),
+  settingsToggleBtn: document.getElementById("settingsToggleBtn"),
   queryInput: document.getElementById("queryInput"),
   startRunBtn: document.getElementById("startRunBtn"),
   launchStatus: document.getElementById("launchStatus"),
+  settingsPanel: document.getElementById("settingsPanel"),
+  settingsCurrentLine: document.getElementById("settingsCurrentLine"),
+  settingsStatus: document.getElementById("settingsStatus"),
+  settingsProvider: document.getElementById("settingsProvider"),
+  settingsModel: document.getElementById("settingsModel"),
+  settingsCustomModel: document.getElementById("settingsCustomModel"),
+  settingsBaseUrl: document.getElementById("settingsBaseUrl"),
+  settingsApiKey: document.getElementById("settingsApiKey"),
+  settingsTemperature: document.getElementById("settingsTemperature"),
+  settingsTemperatureValue: document.getElementById("settingsTemperatureValue"),
+  settingsKeyStatus: document.getElementById("settingsKeyStatus"),
+  testSettingsBtn: document.getElementById("testSettingsBtn"),
+  saveSettingsBtn: document.getElementById("saveSettingsBtn"),
   tickerMetric: document.getElementById("tickerMetric"),
   statusMetric: document.getElementById("statusMetric"),
   ratingMetric: document.getElementById("ratingMetric"),
@@ -76,6 +92,7 @@ const els = {
 async function init() {
   bindEvents();
   await loadUsers();
+  await loadSettings();
   await loadPayload();
   state.refreshTimer = window.setInterval(loadPayload, 2500);
 }
@@ -85,6 +102,7 @@ function bindEvents() {
     state.userId = els.userSelect.value || "chainlit";
     localStorage.setItem("finAgentDashboardUser", state.userId);
     state.runId = "";
+    await loadSettings();
     await loadPayload();
   });
 
@@ -95,6 +113,14 @@ function bindEvents() {
 
   els.refreshBtn.addEventListener("click", loadPayload);
   els.reloadReportBtn.addEventListener("click", () => loadReport({ force: true }));
+  els.settingsToggleBtn.addEventListener("click", toggleSettingsPanel);
+  els.settingsProvider.addEventListener("change", handleSettingsProviderChange);
+  els.settingsModel.addEventListener("change", handleSettingsModelChange);
+  els.settingsCustomModel.addEventListener("input", updateSettingsDraftLine);
+  els.settingsBaseUrl.addEventListener("input", updateSettingsDraftLine);
+  els.settingsTemperature.addEventListener("input", updateTemperatureLabel);
+  els.saveSettingsBtn.addEventListener("click", saveSettings);
+  els.testSettingsBtn.addEventListener("click", testSettings);
 
   els.startRunBtn.addEventListener("click", startRun);
   els.queryInput.addEventListener("keydown", async (event) => {
@@ -124,6 +150,191 @@ async function loadUsers() {
   els.userSelect.value = state.userId;
 }
 
+async function loadSettings() {
+  const params = new URLSearchParams({ user_id: state.userId || "chainlit" });
+  try {
+    state.settings = await getJson(`/api/settings?${params.toString()}`);
+    renderSettingsPanel();
+  } catch (error) {
+    state.settings = null;
+    setSettingsStatus(`读取失败：${error.message}`);
+  }
+}
+
+function toggleSettingsPanel() {
+  state.settingsOpen = !state.settingsOpen;
+  localStorage.setItem("finAgentSettingsOpen", state.settingsOpen ? "true" : "false");
+  setSettingsPanelVisibility();
+}
+
+function renderSettingsPanel() {
+  setSettingsPanelVisibility();
+  const providers = state.settings?.providers || [];
+  const settings = state.settings?.settings || {};
+  if (providers.length === 0) {
+    setSettingsStatus("暂无 provider");
+    return;
+  }
+
+  replaceOptions(
+    els.settingsProvider,
+    providers.map((provider) => ({
+      label: provider.label,
+      value: provider.value,
+    })),
+  );
+
+  const provider = settings.provider || providers[0].value;
+  els.settingsProvider.value = provider;
+  applyModelOptions(provider, settings.model || providerDefaults(provider)?.default_model || "");
+  els.settingsBaseUrl.value = settings.base_url || providerDefaults(provider)?.default_base_url || "";
+  els.settingsApiKey.value = "";
+  els.settingsTemperature.value = String(settings.temperature ?? 0.2);
+  updateTemperatureLabel();
+
+  els.settingsCurrentLine.textContent = `${settings.provider_label || providerLabel(provider)} / ${settings.model || "未选择模型"} / ${settings.base_url || "默认入口"}`;
+  els.settingsKeyStatus.textContent = `API Key：${settings.api_key_masked || "未配置"}${settings.api_key_source ? ` / ${settings.api_key_source}` : ""}`;
+  setSettingsStatus(settings.updated_at ? `已保存 ${settings.updated_at}` : "使用默认配置");
+}
+
+function setSettingsPanelVisibility() {
+  els.settingsPanel.classList.toggle("is-hidden", !state.settingsOpen);
+  els.settingsToggleBtn.textContent = state.settingsOpen ? "收起设置" : "模型设置";
+}
+
+function handleSettingsProviderChange() {
+  const provider = els.settingsProvider.value || "openai";
+  const defaults = providerDefaults(provider);
+  applyModelOptions(provider, defaults?.default_model || "");
+  els.settingsBaseUrl.value = defaults?.default_base_url || "";
+  updateSettingsDraftLine();
+  els.settingsKeyStatus.textContent = "API Key：当前表单尚未保存";
+  setSettingsStatus(`已切换到 ${providerLabel(provider)}`);
+}
+
+function handleSettingsModelChange() {
+  syncCustomModelState();
+  updateSettingsDraftLine();
+  if (els.settingsModel.value === "__custom__") {
+    els.settingsCustomModel.focus();
+  }
+}
+
+function updateTemperatureLabel() {
+  const number = Number(els.settingsTemperature.value || 0);
+  els.settingsTemperatureValue.textContent = Number.isFinite(number) ? number.toFixed(2) : "0.20";
+}
+
+function applyModelOptions(providerValue, selectedModel) {
+  const provider = providerDefaults(providerValue) || {};
+  const models = provider.models || [];
+  replaceOptions(
+    els.settingsModel,
+    [
+      ...models.map((model) => ({
+        label: model.label,
+        value: model.value,
+      })),
+      { label: "自定义模型", value: "__custom__" },
+    ],
+  );
+
+  const modelValue = selectedModel || provider.default_model || "";
+  const known = models.some((model) => model.value === modelValue);
+  els.settingsModel.value = known ? modelValue : "__custom__";
+  els.settingsCustomModel.value = known ? "" : modelValue;
+  syncCustomModelState();
+}
+
+function syncCustomModelState() {
+  const isCustom = els.settingsModel.value === "__custom__";
+  els.settingsCustomModel.disabled = !isCustom;
+  els.settingsCustomModel.placeholder = isCustom ? "输入自定义模型名" : "使用上方模型";
+}
+
+function updateSettingsDraftLine() {
+  const provider = els.settingsProvider.value || "openai";
+  const model = els.settingsModel.value === "__custom__"
+    ? els.settingsCustomModel.value.trim()
+    : els.settingsModel.value;
+  const baseUrl = els.settingsBaseUrl.value.trim();
+  els.settingsCurrentLine.textContent = `${providerLabel(provider)} / ${model || "未选择模型"} / ${baseUrl || "默认入口"}`;
+}
+
+function collectSettingsPayload() {
+  const provider = els.settingsProvider.value || "openai";
+  const defaults = providerDefaults(provider);
+  const selectedModel = els.settingsModel.value === "__custom__"
+    ? els.settingsCustomModel.value.trim()
+    : els.settingsModel.value;
+  return {
+    user_id: state.userId || "chainlit",
+    provider,
+    model: selectedModel || defaults?.default_model || "",
+    base_url: els.settingsBaseUrl.value.trim(),
+    api_key: els.settingsApiKey.value.trim(),
+    temperature: Number(els.settingsTemperature.value || 0.2),
+  };
+}
+
+async function saveSettings() {
+  const payload = collectSettingsPayload();
+  setSettingsButtonsDisabled(true);
+  setSettingsStatus("保存中");
+  try {
+    const data = await postJson("/api/settings/save", payload);
+    state.settings = {
+      ...(state.settings || {}),
+      settings: data.settings,
+    };
+    renderSettingsPanel();
+    setSettingsStatus("已保存");
+  } catch (error) {
+    setSettingsStatus(`保存失败：${error.message}`);
+  } finally {
+    setSettingsButtonsDisabled(false);
+  }
+}
+
+async function testSettings() {
+  const payload = collectSettingsPayload();
+  setSettingsButtonsDisabled(true);
+  setSettingsStatus("测试中");
+  try {
+    const data = await postJson("/api/settings/test", payload);
+    const result = data.result || {};
+    setSettingsStatus(result.ok ? `连接成功：${result.message || "模型已响应"}` : `连接失败：${result.message || result.status || "未知错误"}`);
+  } catch (error) {
+    setSettingsStatus(`测试失败：${error.message}`);
+  } finally {
+    setSettingsButtonsDisabled(false);
+  }
+}
+
+function setSettingsButtonsDisabled(disabled) {
+  els.saveSettingsBtn.disabled = disabled;
+  els.testSettingsBtn.disabled = disabled;
+}
+
+function setSettingsStatus(message) {
+  els.settingsStatus.textContent = message || "等待配置";
+}
+
+function providerDefaults(providerValue) {
+  return (state.settings?.providers || []).find((provider) => provider.value === providerValue);
+}
+
+function providerLabel(providerValue) {
+  return providerDefaults(providerValue)?.label || providerValue;
+}
+
+function replaceOptions(select, items) {
+  select.innerHTML = "";
+  for (const item of items) {
+    select.append(new Option(item.label, item.value));
+  }
+}
+
 async function loadPayload() {
   const params = new URLSearchParams({ user_id: state.userId });
   if (state.runId) {
@@ -135,6 +346,7 @@ async function loadPayload() {
     state.userId = state.payload.users[0].user_id;
     localStorage.setItem("finAgentDashboardUser", state.userId);
     await loadUsers();
+    await loadSettings();
     return loadPayload();
   }
 

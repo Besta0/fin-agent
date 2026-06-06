@@ -37,6 +37,7 @@ Chainlit 现在有两层产品入口：产品主页负责介绍价值和功能�
 - 研究流水线：展示标的识别、数据采集、分析辩论、报告质检、观察池沉淀的完整路径
 - Agent 协作看板：每次分析生成 run 记录，实时展示每个 Agent 的状态、角色、摘要和关键输出
 - 独立看板前端：可在 `http://localhost:8001` 单独查看 run、Agent 队列、详情和时间线
+- 独立看板模型设置：用户可在浏览器里选择 OpenAI、DeepSeek、MiniMax、小米 MiMo，模型列表和 base_url 随 provider 自动切换，并可直接测试连接
 - 多空辩论区：把 Bull、Bear、Committee 的观点放到同一页，像投委会讨论一样展示分歧和裁决
 - 上下文按钮：产品主页提供“进入工作台 / 分析标的 / 模型设置 / 能力指南”，工作台按状态提供研究动作
 - 侧边栏设置：用户可以按 provider 选择模型，provider 改变时 model 和 base_url 跟随刷新，并支持自定义模型名和本会话 API key
@@ -342,9 +343,11 @@ dashboard
 - 独立看板支持展示 Portfolio Agent 维护的观察池，包含优先级、组合角色、收益表现和跟踪理由
 - 独立看板支持按同一 ticker 对比历史 run，展示结论、置信度、价格表现和核心观点变化
 - 独立看板支持读取本次 run 的 Markdown 报告，并展示报告指标、正文、保存路径和新闻链接
+- 独立看板支持按用户保存模型配置，后台启动研究时会自动使用该用户选择的 provider、model、base_url、API key 和 temperature
 - 提供“多空辩论区”，集中展示 Bull Agent、Bear Agent 和 Committee Agent 的观点分歧与裁决
 - 分析完成后提供快捷按钮：Agent 看板、多空辩论、打开报告、重新分析
 - run 文件保存到 `outputs/users/{user_id}/runs/*.json`，不会进入 git
+- 独立看板模型设置保存到 `outputs/users/{user_id}/settings.json`，不会进入 git；API key 只在页面显示脱敏状态
 
 触发方式：
 
@@ -382,7 +385,10 @@ Agent 看板
 
 ### Settings Panel
 
-文件：`financial_agent/tools/settings_panel.py`
+文件：
+
+- `financial_agent/tools/settings_panel.py`
+- `financial_agent/tools/dashboard_settings.py`
 
 职责：
 
@@ -394,6 +400,8 @@ Agent 看板
 - 侧边栏 Chat Settings 支持用户配置自己的 provider、model、base_url、API key 和 temperature
 - Model 下拉选项会随 Provider 自动切换；Base URL 也会随 Provider 自动刷新为默认值
 - UI 配置只对当前会话生效，不写入 `.env`、报告或记忆库；刷新或重启后回退到服务端配置
+- 独立看板提供持久化模型设置面板，保存到当前用户目录，并在启动 LangGraph 后台研究时注入运行时 LLM 配置
+- 独立看板保存 API key 后只返回脱敏状态，测试连接不会把完整 key 写入报告、run 事件或页面文本
 
 触发方式：
 
@@ -418,6 +426,14 @@ Chainlit 侧边栏可以直接配置：
 - Base URL：切换 Provider 后自动刷新默认值；OpenAI 官方接口可留空，兼容接口可手动覆盖
 - API Key：留空则继续使用当前 key；填写后本会话使用用户自己的 key
 - Temperature：0 到 1
+
+独立看板可以直接配置：
+
+- Provider：OpenAI、DeepSeek、MiniMax、Xiaomi MiMo
+- 模型：随 Provider 自动刷新，也支持自定义模型名
+- Base URL：随 Provider 自动刷新，必要时可手动覆盖
+- API Key：保存到当前 user_id 的本地 settings 文件；留空保存时会沿用同 provider 已保存 key
+- 测试连接：使用当前表单内容发起一次最小 LLM 请求，不需要先启动完整投研流程
 
 ### Report Agent
 
@@ -626,6 +642,7 @@ History: append JSONL record
 │   ├── tools
 │   │   ├── charting.py
 │   │   ├── dashboard.py
+│   │   ├── dashboard_settings.py
 │   │   ├── fundamentals.py
 │   │   ├── history.py
 │   │   ├── indicators.py
@@ -720,6 +737,8 @@ LLM_BASE_URL=https://api.xiaomimimo.com/v1
 测试模型连接
 ```
 
+也可以在独立看板右上角点击“模型设置”，为当前 user_id 保存一套独立配置。后台从看板启动研究时，会优先使用该用户的本地配置；如果没有保存配置，则回退到 `.env`。
+
 ## 运行
 
 启动 Chainlit：
@@ -745,6 +764,13 @@ python -m financial_agent.dashboard_server --host 127.0.0.1 --port 8001
 ```text
 http://localhost:8001
 ```
+
+独立看板支持：
+
+- 顶部输入框直接启动新研究
+- “模型设置”面板选择 provider、model、base_url、API key 和 temperature
+- “测试连接”验证当前模型配置
+- 观察每个 Agent 的输出、协作时间线、多空辩论、历史对比和报告正文
 
 在独立看板里输入问题，例如：
 
@@ -798,6 +824,7 @@ Agent 看板
 - Dashboard Intent：用户问“投研工作台 / dashboard / 仪表盘”时返回观察池、记忆库和最近报告总览
 - Report Browser Intent：用户问“打开最近报告 / 打开 NVDA 报告 / 打开英伟达报告 / 报告列表”时返回产品化报告阅读页或报告列表
 - Settings Intent：用户问“模型设置 / 测试模型连接 / 小米配置”时返回 provider 配置状态和连接测试结果
+- 独立看板模型设置：按用户保存 provider、model、base_url、API key 和 temperature，并可在页面测试连接
 - Watchlist Intent：用户问“查看观察池 / 我的 watchlist / 优先级最高”时直接返回观察池表格
 - Watchlist Detail Intent：用户问“为什么某个 ticker 在观察池 / 观察池详情”时返回该标的跟踪理由
 - 早停路由：无法识别 ticker 或问题不是股票投研时，不启动后续分析 Agent

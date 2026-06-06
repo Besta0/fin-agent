@@ -11,7 +11,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from financial_agent.graph.workflow import build_research_graph
+from financial_agent.tools.dashboard_settings import (
+    payload_to_llm_config,
+    save_user_model_settings,
+    settings_page_payload,
+    user_settings_to_llm_config,
+)
 from financial_agent.tools.memory import safe_user_id, user_reports_dir
 from financial_agent.tools.report_browser import (
     _extract_confidence,
@@ -64,13 +69,26 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
-        if parsed.path != "/api/run/start":
+        if parsed.path not in {"/api/run/start", "/api/settings/save", "/api/settings/test"}:
             self._send_json({"error": "Unknown API route."}, HTTPStatus.NOT_FOUND)
             return
 
         body = self._read_json_body()
         if body is None:
             self._send_json({"error": "Invalid JSON body."}, HTTPStatus.BAD_REQUEST)
+            return
+
+        if parsed.path == "/api/settings/save":
+            user_id = safe_user_id(str(body.get("user_id") or "chainlit"))
+            settings = save_user_model_settings(user_id, body)
+            self._send_json({"ok": True, "settings": settings})
+            return
+
+        if parsed.path == "/api/settings/test":
+            user_id = safe_user_id(str(body.get("user_id") or "chainlit"))
+            config = payload_to_llm_config(user_id, body)
+            result = _run_llm_connection_test(config)
+            self._send_json({"ok": bool(result.get("ok")), "result": result})
             return
 
         query = str(body.get("query") or "").strip()
@@ -122,6 +140,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
         if path == "/api/watchlist":
             self._send_json(_watchlist_payload(user_id))
+            return
+
+        if path == "/api/settings":
+            self._send_json(settings_page_payload(user_id))
             return
 
         if path.startswith("/api/run/"):
@@ -178,6 +200,20 @@ def _first(query: dict[str, list[str]], key: str, fallback: str) -> str:
     if not values:
         return fallback
     return values[0] or fallback
+
+
+def _run_llm_connection_test(config) -> dict:
+    from financial_agent.llm import reset_runtime_llm_config, set_runtime_llm_config
+    from financial_agent.tools.settings_panel import test_llm_connection
+
+    async def runner() -> dict:
+        token = set_runtime_llm_config(config)
+        try:
+            return await test_llm_connection(timeout_seconds=20)
+        finally:
+            reset_runtime_llm_config(token)
+
+    return asyncio.run(runner())
 
 
 def _report_payload(user_id: str, run_id: str | None) -> dict:
@@ -419,9 +455,14 @@ def _watchlist_item_payload(item: dict) -> dict:
 
 def _run_research_in_background(user_id: str, run_id: str, query: str) -> None:
     async def runner() -> None:
-        graph = build_research_graph()
         latest_state: dict = {}
+        token = None
         try:
+            from financial_agent.graph.workflow import build_research_graph
+            from financial_agent.llm import reset_runtime_llm_config, set_runtime_llm_config
+
+            token = set_runtime_llm_config(user_settings_to_llm_config(user_id))
+            graph = build_research_graph()
             async for event in graph.astream(
                 {
                     "user_id": user_id,
@@ -454,6 +495,9 @@ def _run_research_in_background(user_id: str, run_id: str, query: str) -> None:
             complete_run_record(user_id, run_id, latest_state, status="completed")
         except Exception as exc:  # noqa: BLE001
             fail_run_record(user_id, run_id, str(exc))
+        finally:
+            if token is not None:
+                reset_runtime_llm_config(token)
 
     asyncio.run(runner())
 
