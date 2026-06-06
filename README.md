@@ -35,7 +35,7 @@ Chainlit 现在有两层产品入口：产品主页负责介绍价值和功能�
 - 任务中心：根据当前配置自动给出下一步动作，例如先配置模型、测试连接、打开观察池或复盘最新报告
 - 工作区：把新建研究、报告库、观察池、记忆库、模型设置固定成核心入口
 - 研究流水线：展示标的识别、数据采集、分析辩论、报告质检、观察池沉淀的完整路径
-- Agent 协作看板：每次分析生成 run 记录，实时展示每个 Agent 的状态、角色、摘要和关键输出
+- Agent 协作看板：每次分析生成 run 记录，实时展示每个 Agent 的状态、角色、摘要、耗时和关键输出
 - 独立看板前端：可在 `http://localhost:8001` 单独查看 run、Agent 队列、详情和时间线
 - 独立看板启动区：提供短线走势、历史复盘、财报后分析、中文公司名等研究模板，并展示当前新研究会使用的模型配置状态
 - 独立看板模型设置：用户可在浏览器里选择 OpenAI、DeepSeek、MiniMax、小米 MiMo，模型列表和 base_url 随 provider 自动切换，并可直接测试连接
@@ -340,6 +340,7 @@ dashboard
 - 把每个 Agent 的完成状态、角色、摘要和关键输出写入本地 JSON
 - 在 Chainlit 中渲染“Multi-Agent 协作看板”，让用户看到不同 Agent 像团队成员一样工作
 - 提供独立前端看板：顶部指标、观察池、历史对比、Agent 卡片、详情面板、协作时间线、多空辩论区和报告阅读页
+- 独立看板支持运行中状态：高亮当前 Agent，展示当前阶段、总耗时、节点耗时和失败节点
 - 独立看板支持直接输入研究问题并启动 LangGraph 分析，随后自动切到新 run 并轮询刷新
 - 独立看板支持一键填入研究模板，并在启动前展示当前用户的 provider、model 和 API key 配置状态
 - 独立看板支持展示 Portfolio Agent 维护的观察池，包含优先级、组合角色、收益表现和跟踪理由
@@ -349,6 +350,7 @@ dashboard
 - 提供“多空辩论区”，集中展示 Bull Agent、Bear Agent 和 Committee Agent 的观点分歧与裁决
 - 分析完成后提供快捷按钮：Agent 看板、多空辩论、打开报告、重新分析
 - run 文件保存到 `outputs/users/{user_id}/runs/*.json`，不会进入 git
+- 新 run 事件会记录 `started_at`、`finished_at` 和 `duration_seconds`，失败时记录 `failed_node` 和结构化错误信息
 - 独立看板模型设置保存到 `outputs/users/{user_id}/settings.json`，不会进入 git；API key 只在页面显示脱敏状态
 
 触发方式：
@@ -772,6 +774,7 @@ http://localhost:8001
 - 顶部输入框直接启动新研究
 - 研究模板一键填入常见问题，例如短线走势、历史复盘、财报后分析和中文公司名分析
 - 启动区展示当前新研究使用的 provider、model 和 key 状态
+- Agent 卡片展示当前工作态、节点耗时、失败原因和协作时间线耗时
 - “模型设置”面板选择 provider、model、base_url、API key 和 temperature
 - “测试连接”验证当前模型配置
 - 观察每个 Agent 的输出、协作时间线、多空辩论、历史对比和报告正文
@@ -829,6 +832,7 @@ Agent 看板
 - Report Browser Intent：用户问“打开最近报告 / 打开 NVDA 报告 / 打开英伟达报告 / 报告列表”时返回产品化报告阅读页或报告列表
 - Settings Intent：用户问“模型设置 / 测试模型连接 / 小米配置”时返回 provider 配置状态和连接测试结果
 - 独立看板模型设置：按用户保存 provider、model、base_url、API key 和 temperature，并可在页面测试连接
+- 独立看板实时运行态：展示当前 Agent、节点耗时、总耗时、失败节点和错误详情
 - Watchlist Intent：用户问“查看观察池 / 我的 watchlist / 优先级最高”时直接返回观察池表格
 - Watchlist Detail Intent：用户问“为什么某个 ticker 在观察池 / 观察池详情”时返回该标的跟踪理由
 - 早停路由：无法识别 ticker 或问题不是股票投研时，不启动后续分析 Agent

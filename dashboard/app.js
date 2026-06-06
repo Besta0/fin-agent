@@ -60,6 +60,7 @@ const els = {
   progressMetric: document.getElementById("progressMetric"),
   queryText: document.getElementById("queryText"),
   runIdText: document.getElementById("runIdText"),
+  currentNodeText: document.getElementById("currentNodeText"),
   updatedText: document.getElementById("updatedText"),
   agentCount: document.getElementById("agentCount"),
   agentGrid: document.getElementById("agentGrid"),
@@ -614,6 +615,7 @@ function renderDashboard() {
   const events = run.events || [];
   const eventByNode = Object.fromEntries(events.map((event) => [event.node, event]));
   const completeCount = events.length;
+  const totalElapsed = formatRunElapsed(run);
 
   els.tickerMetric.textContent = run.ticker || "识别中";
   els.statusMetric.textContent = statusLabels[run.status] || run.status || "N/A";
@@ -622,12 +624,13 @@ function renderDashboard() {
   els.progressMetric.textContent = `${completeCount}/${flow.length || 14}`;
   els.queryText.textContent = run.user_query || "N/A";
   els.runIdText.textContent = run.run_id || "N/A";
+  els.currentNodeText.textContent = currentNodeLine(flow, run, events);
   els.updatedText.textContent = run.updated_at || "N/A";
   els.agentCount.textContent = `${flow.length} agents`;
-  els.eventCount.textContent = `${completeCount} events`;
+  els.eventCount.textContent = `${completeCount} events${totalElapsed ? ` / ${totalElapsed}` : ""}`;
 
-  renderAgents(flow, run, eventByNode);
-  renderDetails(flow, run, eventByNode);
+  renderAgents(flow, run, events, eventByNode);
+  renderDetails(flow, run, events, eventByNode);
   renderTimeline(events);
   renderDebate(eventByNode, run);
 }
@@ -640,6 +643,7 @@ function renderEmpty(flow) {
   els.progressMetric.textContent = `0/${flow.length || 14}`;
   els.queryText.textContent = "还没有运行记录。可以在上方输入研究问题并启动一次多 Agent 分析。";
   els.runIdText.textContent = "N/A";
+  els.currentNodeText.textContent = "N/A";
   els.updatedText.textContent = "N/A";
   els.agentGrid.innerHTML = `<div class="empty">暂无 Agent 运行记录。</div>`;
   els.detailContent.innerHTML = `<div class="empty">完成一次分析后，这里会展示每个 Agent 的结构化输出。</div>`;
@@ -647,19 +651,27 @@ function renderEmpty(flow) {
   renderDebate({}, {});
 }
 
-function renderAgents(flow, run, eventByNode) {
+function renderAgents(flow, run, events, eventByNode) {
   els.agentGrid.innerHTML = "";
   for (const agent of flow) {
     const event = eventByNode[agent.node];
     const status = statusForNode(run, agent.node, event);
+    const timing = nodeTiming(flow, run, events, agent.node, event);
+    const stateClass = status === "工作中" ? "running-node" : status === "出错" ? "failed-node" : "";
     const card = document.createElement("button");
     card.type = "button";
-    card.className = `agent-card ${state.selectedNode === agent.node ? "selected" : ""}`;
+    card.className = `agent-card ${stateClass} ${state.selectedNode === agent.node ? "selected" : ""}`;
     card.innerHTML = `
-      <h3>${escapeHtml(agent.name)}</h3>
+      <div class="agent-card-head">
+        <h3>${escapeHtml(agent.name)}</h3>
+        <span class="live-dot ${statusClasses[status] || "waiting"}"></span>
+      </div>
       <div class="agent-role">${escapeHtml(agent.role)}</div>
       <p class="agent-summary">${escapeHtml(stripMarkdown(event?.summary || agent.mission))}</p>
-      <span class="badge ${statusClasses[status] || "waiting"}">${status}</span>
+      <div class="agent-meta">
+        <span class="badge ${statusClasses[status] || "waiting"}">${status}</span>
+        <span>${escapeHtml(timing.label)}</span>
+      </div>
     `;
     card.addEventListener("click", () => {
       state.selectedNode = agent.node;
@@ -669,7 +681,7 @@ function renderAgents(flow, run, eventByNode) {
   }
 }
 
-function renderDetails(flow, run, eventByNode) {
+function renderDetails(flow, run, events, eventByNode) {
   const selected = flow.find((agent) => agent.node === state.selectedNode) || flow[0];
   if (!selected) {
     return;
@@ -677,24 +689,41 @@ function renderDetails(flow, run, eventByNode) {
 
   const event = eventByNode[selected.node];
   const status = statusForNode(run, selected.node, event);
+  const timing = nodeTiming(flow, run, events, selected.node, event);
+  const nodeError = errorForNode(run, selected.node);
   els.detailTitle.textContent = `${selected.name} / ${selected.role}`;
   els.detailStatus.textContent = status;
   els.detailMission.textContent = selected.mission;
 
   if (!event) {
-    els.detailContent.innerHTML = `<div class="empty">这个 Agent 尚未输出。分析运行到对应阶段后会自动更新。</div>`;
+    els.detailContent.innerHTML = `
+      <div class="kv-row">
+        <div class="kv-key">运行状态</div>
+        <div class="kv-value">${escapeHtml(status)} / ${escapeHtml(timing.label)}</div>
+      </div>
+      ${nodeError ? renderErrorBox(nodeError) : `<div class="empty">这个 Agent 尚未输出。分析运行到对应阶段后会自动更新。</div>`}
+    `;
     return;
   }
 
   els.detailContent.innerHTML = `
     <div class="kv-row">
+      <div class="kv-key">开始时间</div>
+      <div class="kv-value">${escapeHtml(timing.startedAt || "N/A")}</div>
+    </div>
+    <div class="kv-row">
       <div class="kv-key">完成时间</div>
       <div class="kv-value">${escapeHtml(event.finished_at || "N/A")}</div>
+    </div>
+    <div class="kv-row">
+      <div class="kv-key">耗时</div>
+      <div class="kv-value">${escapeHtml(timing.label)}</div>
     </div>
     <div class="kv-row">
       <div class="kv-key">摘要</div>
       <div class="kv-value">${escapeHtml(stripMarkdown(event.summary || "N/A"))}</div>
     </div>
+    ${nodeError ? renderErrorBox(nodeError) : ""}
     ${renderObject(event.output)}
   `;
 }
@@ -710,7 +739,7 @@ function renderTimeline(events) {
         <div class="timeline-item">
           <strong>${event.index}. ${escapeHtml(event.agent_name || event.node)}</strong>
           <p>${escapeHtml(stripMarkdown(event.summary || ""))}</p>
-          <p>${escapeHtml(event.finished_at || "")}</p>
+          <p class="timeline-meta">${escapeHtml(event.finished_at || "")} / ${escapeHtml(formatDuration(event.duration_seconds ?? eventDurationFromNeighbors(events, event)))}</p>
         </div>
       `,
     )
@@ -1255,11 +1284,152 @@ function trendClass(value) {
   return number > 0 ? "trend-up" : "trend-down";
 }
 
+function parseTime(value) {
+  if (!value) {
+    return null;
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function secondsBetween(start, end) {
+  const startDate = parseTime(start);
+  const endDate = parseTime(end);
+  if (!startDate || !endDate) {
+    return null;
+  }
+  return Math.max(0, (endDate.getTime() - startDate.getTime()) / 1000);
+}
+
+function formatDuration(seconds) {
+  if (seconds === null || seconds === undefined || seconds === "") {
+    return "N/A";
+  }
+  const number = Number(seconds);
+  if (!Number.isFinite(number)) {
+    return "N/A";
+  }
+  if (number < 1) {
+    return "<1s";
+  }
+  if (number < 60) {
+    return `${Math.round(number)}s`;
+  }
+  const minutes = Math.floor(number / 60);
+  const rest = Math.round(number % 60);
+  return rest ? `${minutes}m ${rest}s` : `${minutes}m`;
+}
+
+function formatRunElapsed(run) {
+  if (!run) {
+    return "";
+  }
+  const end = run.finished_at || run.updated_at || new Date().toISOString();
+  const elapsed = secondsBetween(run.created_at, run.status === "running" ? new Date().toISOString() : end);
+  return elapsed === null ? "" : formatDuration(elapsed);
+}
+
+function eventDurationFromNeighbors(events, event) {
+  if (!event) {
+    return null;
+  }
+  if (Number.isFinite(Number(event.duration_seconds))) {
+    return Number(event.duration_seconds);
+  }
+  const previous = (events || []).find((item) => Number(item.index) === Number(event.index) - 1);
+  const startedAt = event.started_at || previous?.finished_at || state.payload?.run?.created_at;
+  return secondsBetween(startedAt, event.finished_at);
+}
+
+function nodeTiming(flow, run, events, node, event) {
+  if (event) {
+    const previous = (events || []).find((item) => Number(item.index) === Number(event.index) - 1);
+    const startedAt = event.started_at || previous?.finished_at || run.created_at;
+    const duration = event.duration_seconds ?? secondsBetween(startedAt, event.finished_at);
+    return {
+      startedAt,
+      duration,
+      label: formatDuration(duration),
+    };
+  }
+
+  const status = statusForNode(run, node, event);
+  if (status === "工作中" || status === "出错") {
+    const startedAt = run.current_node_started_at || latestFinishedAt(events) || run.created_at;
+    const endAt = status === "出错" ? (run.failed_at || run.finished_at || run.updated_at) : new Date().toISOString();
+    const duration = secondsBetween(startedAt, endAt);
+    return {
+      startedAt,
+      duration,
+      label: status === "工作中" ? `已用 ${formatDuration(duration)}` : `停在 ${formatDuration(duration)}`,
+    };
+  }
+
+  const index = (flow || []).findIndex((agent) => agent.node === node);
+  return {
+    startedAt: "",
+    duration: null,
+    label: index >= 0 ? `#${index + 1}` : "等待",
+  };
+}
+
+function latestFinishedAt(events) {
+  const last = (events || [])[Math.max(0, (events || []).length - 1)];
+  return last?.finished_at || null;
+}
+
+function currentNodeLine(flow, run, events) {
+  const elapsed = formatRunElapsed(run);
+  if (run.status === "completed") {
+    return `已完成${elapsed ? ` / 总耗时 ${elapsed}` : ""}`;
+  }
+  if (run.status === "stopped") {
+    return `已早停${elapsed ? ` / 总耗时 ${elapsed}` : ""}`;
+  }
+  const node = run.failed_node || run.current_node;
+  const agent = (flow || []).find((item) => item.node === node);
+  if (run.status === "failed") {
+    return `出错：${agent?.name || node || "未知节点"}`;
+  }
+  if (run.status === "running") {
+    const timing = nodeTiming(flow, run, events, node, null);
+    return `${agent?.name || node || "识别中"} / ${timing.label}`;
+  }
+  return run.status || "N/A";
+}
+
+function errorForNode(run, node) {
+  const errors = run?.errors || [];
+  for (let index = errors.length - 1; index >= 0; index -= 1) {
+    const item = errors[index];
+    if (typeof item === "string") {
+      if ((run.failed_node || run.current_node) === node) {
+        return { message: item, created_at: run.failed_at || run.finished_at || run.updated_at };
+      }
+      continue;
+    }
+    if (item && typeof item === "object" && (!item.node || item.node === node)) {
+      return item;
+    }
+  }
+  return null;
+}
+
+function renderErrorBox(error) {
+  return `
+    <div class="error-box">
+      <strong>失败原因</strong>
+      <p>${escapeHtml(error.message || String(error))}</p>
+      <span>${escapeHtml(error.created_at || "")}</span>
+    </div>
+  `;
+}
+
 function statusForNode(run, node, event) {
   if (event) {
     return "已完成";
   }
-  if (run.status === "failed" && run.current_node === node) {
+  if (run.status === "failed" && (run.failed_node || run.current_node) === node) {
     return "出错";
   }
   if (run.status === "running" && run.current_node === node) {

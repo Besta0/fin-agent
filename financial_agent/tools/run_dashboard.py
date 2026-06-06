@@ -81,6 +81,30 @@ def _now() -> str:
     return datetime.now().isoformat(timespec="seconds")
 
 
+def _parse_time(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
+
+
+def _seconds_between(start: Any, end: Any) -> float | None:
+    start_time = _parse_time(start)
+    end_time = _parse_time(end)
+    if not start_time or not end_time:
+        return None
+    return max(0.0, round((end_time - start_time).total_seconds(), 2))
+
+
+def _previous_event_finished_at(record: dict[str, Any]) -> str | None:
+    events = record.get("events") or []
+    if not events:
+        return None
+    return events[-1].get("finished_at")
+
+
 def _json_default(value: Any) -> str:
     return str(value)
 
@@ -203,6 +227,8 @@ def create_run_record(user_id: str | None, user_query: str) -> dict[str, Any]:
         "updated_at": _now(),
         "finished_at": None,
         "current_node": AGENT_FLOW[0][0],
+        "current_node_started_at": _now(),
+        "failed_node": None,
         "ticker": None,
         "company_name": None,
         "horizon": None,
@@ -486,6 +512,12 @@ def append_run_event(
         record = create_run_record(user_id, update.get("user_query") or "")
         record["run_id"] = run_id
 
+    finished_at = _now()
+    started_at = (
+        record.get("current_node_started_at")
+        if record.get("current_node") == node_name
+        else None
+    ) or _previous_event_finished_at(record) or record.get("created_at") or finished_at
     event = {
         "index": len(record.get("events") or []) + 1,
         "node": node_name,
@@ -493,12 +525,16 @@ def append_run_event(
         "role": AGENT_BY_NODE.get(node_name, {}).get("role", "Agent"),
         "status": "completed",
         "summary": summary,
-        "finished_at": _now(),
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "duration_seconds": _seconds_between(started_at, finished_at),
         "output": _sanitize_value(_event_output(node_name, update)),
     }
     record.setdefault("events", []).append(event)
-    record["updated_at"] = _now()
-    record["current_node"] = _next_node(node_name)
+    record["updated_at"] = finished_at
+    next_node = _next_node(node_name)
+    record["current_node"] = next_node
+    record["current_node_started_at"] = finished_at if next_node else None
     record["ticker"] = update.get("ticker") or record.get("ticker")
     record["company_name"] = update.get("company_name") or record.get("company_name")
     record["horizon"] = update.get("horizon") or record.get("horizon")
@@ -533,6 +569,7 @@ def complete_run_record(
     record["updated_at"] = _now()
     record["finished_at"] = _now()
     record["current_node"] = None
+    record["current_node_started_at"] = None
     record["ticker"] = latest_state.get("ticker") or record.get("ticker")
     record["company_name"] = latest_state.get("company_name") or record.get("company_name")
     record["horizon"] = latest_state.get("horizon") or record.get("horizon")
@@ -555,11 +592,26 @@ def fail_run_record(user_id: str | None, run_id: str, error: str) -> dict[str, A
     record = load_run(user_id, run_id)
     if not record:
         return None
+    failed_at = _now()
+    failed_node = record.get("current_node")
     record["status"] = "failed"
-    record["updated_at"] = _now()
-    record["finished_at"] = _now()
-    record["current_node"] = None
-    record.setdefault("errors", []).append(error)
+    record["updated_at"] = failed_at
+    record["finished_at"] = failed_at
+    record["failed_at"] = failed_at
+    record["failed_node"] = failed_node
+    record["current_node"] = failed_node
+    record["current_node_started_at"] = (
+        record.get("current_node_started_at")
+        or _previous_event_finished_at(record)
+        or record.get("created_at")
+    )
+    record.setdefault("errors", []).append(
+        {
+            "node": failed_node,
+            "message": str(error),
+            "created_at": failed_at,
+        }
+    )
     _write_run(record)
     return record
 
@@ -572,7 +624,7 @@ def _status_for_node(record: dict[str, Any], node: str) -> str:
     events = _events_by_node(record)
     if node in events:
         return "已完成"
-    if record.get("status") == "failed" and node == record.get("current_node"):
+    if record.get("status") == "failed" and node == (record.get("failed_node") or record.get("current_node")):
         return "出错"
     if record.get("status") == "running" and node == record.get("current_node"):
         return "工作中"
@@ -595,6 +647,22 @@ def _run_status_label(status: Any) -> str:
     }.get(str(status or ""), str(status or "N/A"))
 
 
+def _duration_label(seconds: Any) -> str:
+    if seconds is None or seconds == "":
+        return "N/A"
+    try:
+        value = float(seconds)
+    except (TypeError, ValueError):
+        return "N/A"
+    if value < 1:
+        return "<1s"
+    if value < 60:
+        return f"{round(value)}s"
+    minutes = int(value // 60)
+    rest = round(value % 60)
+    return f"{minutes}m {rest}s" if rest else f"{minutes}m"
+
+
 def _top_panel(record: dict[str, Any]) -> str:
     return f"""| 项目 | 当前值 | 项目 | 当前值 |
 |---|---|---|---|
@@ -608,17 +676,19 @@ def _top_panel(record: dict[str, Any]) -> str:
 def format_live_run_board(record: dict[str, Any]) -> str:
     events = _events_by_node(record)
     rows = [
-        "| 顺序 | Agent | 角色 | 状态 | 最新输出 |",
-        "|---:|---|---|---|---|",
+        "| 顺序 | Agent | 角色 | 状态 | 耗时 | 最新输出 |",
+        "|---:|---|---|---|---:|---|",
     ]
     for idx, (node, name, role, _mission) in enumerate(AGENT_FLOW, start=1):
         event = events.get(node, {})
+        duration = _duration_label(event.get("duration_seconds")) if event else "N/A"
         rows.append(
             "| "
             f"{idx} | "
             f"**{name}** | "
             f"{role} | "
             f"**{_status_for_node(record, node)}** | "
+            f"{duration} | "
             f"{_table_cell(_truncate_text(event.get('summary') or AGENT_BY_NODE[node]['mission'], 96))} |"
         )
 
@@ -683,7 +753,9 @@ def format_run_dashboard_response(user_id: str | None = None, run_id: str | None
         sections.append(
             f"### {name} - {role}\n\n"
             f"- 状态：**已完成**\n"
+            f"- 开始时间：**{event.get('started_at', 'N/A')}**\n"
             f"- 完成时间：**{event.get('finished_at', 'N/A')}**\n"
+            f"- 耗时：**{_duration_label(event.get('duration_seconds'))}**\n"
             f"- 摘要：{event.get('summary') or '暂无'}\n\n"
             f"关键输出：\n{_format_output_block(event.get('output'))}"
         )
