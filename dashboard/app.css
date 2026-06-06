@@ -172,14 +172,80 @@ h3 {
 
 .launch-panel {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 132px minmax(210px, 0.42fr);
-  align-items: end;
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.32fr);
+  align-items: stretch;
+  gap: 14px;
   margin-bottom: 12px;
   padding: 14px 16px;
 }
 
-.launch-panel button {
+.launch-main {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.launch-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.model-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.model-chip.ready {
+  border-color: #a7f3d0;
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+.model-chip.warning {
+  border-color: #fed7aa;
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.template-grid button {
+  min-height: 34px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.template-grid button:hover {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.launch-actions {
+  display: grid;
+  align-content: end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.launch-actions button {
   width: 100%;
 }
 
@@ -929,6 +995,10 @@ code {
   .report-meta,
   .agent-grid {
     grid-template-columns: 1fr;
+  }
+
+  .template-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .summary-band > div,

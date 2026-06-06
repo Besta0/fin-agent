@@ -39,6 +39,7 @@ const els = {
   queryInput: document.getElementById("queryInput"),
   startRunBtn: document.getElementById("startRunBtn"),
   launchStatus: document.getElementById("launchStatus"),
+  launchModelStatus: document.getElementById("launchModelStatus"),
   settingsPanel: document.getElementById("settingsPanel"),
   settingsCurrentLine: document.getElementById("settingsCurrentLine"),
   settingsStatus: document.getElementById("settingsStatus"),
@@ -121,6 +122,9 @@ function bindEvents() {
   els.settingsTemperature.addEventListener("input", updateTemperatureLabel);
   els.saveSettingsBtn.addEventListener("click", saveSettings);
   els.testSettingsBtn.addEventListener("click", testSettings);
+  document.querySelectorAll("[data-query-template]").forEach((button) => {
+    button.addEventListener("click", () => applyQueryTemplate(button));
+  });
 
   els.startRunBtn.addEventListener("click", startRun);
   els.queryInput.addEventListener("keydown", async (event) => {
@@ -158,6 +162,7 @@ async function loadSettings() {
   } catch (error) {
     state.settings = null;
     setSettingsStatus(`读取失败：${error.message}`);
+    renderLaunchModelStatus(`模型配置读取失败：${error.message}`);
   }
 }
 
@@ -195,11 +200,34 @@ function renderSettingsPanel() {
   els.settingsCurrentLine.textContent = `${settings.provider_label || providerLabel(provider)} / ${settings.model || "未选择模型"} / ${settings.base_url || "默认入口"}`;
   els.settingsKeyStatus.textContent = `API Key：${settings.api_key_masked || "未配置"}${settings.api_key_source ? ` / ${settings.api_key_source}` : ""}`;
   setSettingsStatus(settings.updated_at ? `已保存 ${settings.updated_at}` : "使用默认配置");
+  renderLaunchModelStatus();
 }
 
 function setSettingsPanelVisibility() {
   els.settingsPanel.classList.toggle("is-hidden", !state.settingsOpen);
   els.settingsToggleBtn.textContent = state.settingsOpen ? "收起设置" : "模型设置";
+}
+
+function renderLaunchModelStatus(overrideMessage = "") {
+  if (overrideMessage) {
+    els.launchModelStatus.textContent = overrideMessage;
+    els.launchModelStatus.className = "model-chip warning";
+    return;
+  }
+
+  const settings = state.settings?.settings;
+  if (!settings) {
+    els.launchModelStatus.textContent = "模型配置未读取";
+    els.launchModelStatus.className = "model-chip warning";
+    return;
+  }
+
+  const provider = settings.provider_label || providerLabel(settings.provider) || settings.provider || "Provider";
+  const model = settings.model || "未选择模型";
+  els.launchModelStatus.textContent = settings.api_key_configured
+    ? `${provider} / ${model} / key 已配置`
+    : `${provider} / ${model} / 未配置 key`;
+  els.launchModelStatus.className = `model-chip ${settings.api_key_configured ? "ready" : "warning"}`;
 }
 
 function handleSettingsProviderChange() {
@@ -333,6 +361,16 @@ function replaceOptions(select, items) {
   for (const item of items) {
     select.append(new Option(item.label, item.value));
   }
+}
+
+function applyQueryTemplate(button) {
+  const template = button.getAttribute("data-query-template") || "";
+  if (!template) {
+    return;
+  }
+  els.queryInput.value = template;
+  els.launchStatus.textContent = "已填入研究模板，可以直接启动，也可以继续修改。";
+  els.queryInput.focus();
 }
 
 async function loadPayload() {
@@ -502,9 +540,13 @@ async function startRun() {
     return;
   }
 
+  const currentSettings = state.settings?.settings;
+  const launchPrefix = currentSettings && !currentSettings.api_key_configured
+    ? "当前用户未配置 API Key，LLM 生成能力可能受限；"
+    : "";
   els.startRunBtn.disabled = true;
   els.startRunBtn.textContent = "启动中";
-  els.launchStatus.textContent = "正在创建 run，并启动多 Agent 工作流...";
+  els.launchStatus.textContent = `${launchPrefix}正在创建 run，并启动多 Agent 工作流...`;
   try {
     const data = await postJson("/api/run/start", {
       user_id: state.userId || "chainlit",

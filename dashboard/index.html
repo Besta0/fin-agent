@@ -29,12 +29,23 @@
 
       <main>
         <section class="launch-panel">
-          <div>
-            <span class="metric-label">启动新研究</span>
+          <div class="launch-main">
+            <div class="launch-heading">
+              <span class="metric-label">启动新研究</span>
+              <span id="launchModelStatus" class="model-chip">读取模型配置中</span>
+            </div>
             <textarea id="queryInput" rows="2" placeholder="例如：帮我分析一下 NVDA 未来一个月走势"></textarea>
+            <div class="template-grid" aria-label="研究模板">
+              <button type="button" data-query-template="帮我分析一下 NVDA 未来一个月走势，重点看技术面、估值压力和新闻催化">短线走势</button>
+              <button type="button" data-query-template="帮我复盘 TSLA 最近一次分析结论，重点看观点是否需要上调或下调">历史复盘</button>
+              <button type="button" data-query-template="帮我分析一下 AVGO 财报后的投资机会和主要风险">财报后分析</button>
+              <button type="button" data-query-template="帮我分析一下闪迪未来一个月走势，并整理新闻线索和风险点">中文公司名</button>
+            </div>
           </div>
-          <button id="startRunBtn" type="button">启动研究</button>
-          <p id="launchStatus" class="muted">在这里直接发起一次多 Agent 分析，看板会自动切到新 run。</p>
+          <div class="launch-actions">
+            <button id="startRunBtn" type="button">启动研究</button>
+            <p id="launchStatus" class="muted">选择模板或直接输入问题，看板会自动切到新 run。</p>
+          </div>
         </section>
 
         <section id="settingsPanel" class="panel settings-panel is-hidden">
