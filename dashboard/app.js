@@ -1,4 +1,8 @@
 const initialParams = new URLSearchParams(window.location.search);
+const savedAgentFilter = localStorage.getItem("finAgentAgentFilter");
+const initialAgentFilter = ["all", "active", "done", "pending", "failed"].includes(savedAgentFilter)
+  ? savedAgentFilter
+  : "all";
 
 const state = {
   userId: initialParams.get("user_id") || localStorage.getItem("finAgentDashboardUser") || "chainlit",
@@ -13,6 +17,7 @@ const state = {
   watchlistKey: "",
   settings: null,
   settingsOpen: localStorage.getItem("finAgentSettingsOpen") === "true",
+  agentFilter: initialAgentFilter,
   refreshTimer: null,
 };
 
@@ -29,6 +34,14 @@ const statusClasses = {
   "等待中": "waiting",
   "未运行": "waiting",
   "出错": "failed",
+};
+
+const agentFilterLabels = {
+  all: "全部",
+  active: "运行中",
+  done: "已完成",
+  pending: "待处理",
+  failed: "失败",
 };
 
 const els = {
@@ -125,6 +138,13 @@ function bindEvents() {
   els.testSettingsBtn.addEventListener("click", testSettings);
   document.querySelectorAll("[data-query-template]").forEach((button) => {
     button.addEventListener("click", () => applyQueryTemplate(button));
+  });
+  document.querySelectorAll("[data-agent-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.agentFilter = button.getAttribute("data-agent-filter") || "all";
+      localStorage.setItem("finAgentAgentFilter", state.agentFilter);
+      renderDashboard();
+    });
   });
 
   els.startRunBtn.addEventListener("click", startRun);
@@ -646,6 +666,7 @@ function renderEmpty(flow) {
   els.currentNodeText.textContent = "N/A";
   els.updatedText.textContent = "N/A";
   els.agentGrid.innerHTML = `<div class="empty">暂无 Agent 运行记录。</div>`;
+  renderAgentFilters([]);
   els.detailContent.innerHTML = `<div class="empty">完成一次分析后，这里会展示每个 Agent 的结构化输出。</div>`;
   els.timeline.innerHTML = `<div class="empty">等待运行事件。</div>`;
   renderDebate({}, {});
@@ -653,10 +674,29 @@ function renderEmpty(flow) {
 
 function renderAgents(flow, run, events, eventByNode) {
   els.agentGrid.innerHTML = "";
-  for (const agent of flow) {
+  const rows = flow.map((agent) => {
     const event = eventByNode[agent.node];
     const status = statusForNode(run, agent.node, event);
-    const timing = nodeTiming(flow, run, events, agent.node, event);
+    return {
+      agent,
+      event,
+      status,
+      timing: nodeTiming(flow, run, events, agent.node, event),
+    };
+  });
+  const visibleRows = rows.filter((row) => matchesAgentFilter(row, state.agentFilter));
+  renderAgentFilters(rows, visibleRows.length);
+
+  if (!visibleRows.some((row) => row.agent.node === state.selectedNode) && visibleRows.length > 0) {
+    state.selectedNode = visibleRows[0].agent.node;
+  }
+
+  if (visibleRows.length === 0) {
+    els.agentGrid.innerHTML = `<div class="empty">当前筛选下没有 Agent。切换到“全部”可以查看完整协作队列。</div>`;
+    return;
+  }
+
+  for (const { agent, event, status, timing } of visibleRows) {
     const stateClass = status === "工作中" ? "running-node" : status === "出错" ? "failed-node" : "";
     const card = document.createElement("button");
     card.type = "button";
@@ -679,6 +719,33 @@ function renderAgents(flow, run, events, eventByNode) {
     });
     els.agentGrid.append(card);
   }
+}
+
+function renderAgentFilters(rows, visibleCount = 0) {
+  const filters = document.querySelectorAll("[data-agent-filter]");
+  for (const button of filters) {
+    const filter = button.getAttribute("data-agent-filter") || "all";
+    const count = rows.filter((row) => matchesAgentFilter(row, filter)).length;
+    button.textContent = `${agentFilterLabels[filter] || filter} ${count}`;
+    button.classList.toggle("active", state.agentFilter === filter);
+  }
+  els.agentCount.textContent = `${visibleCount}/${rows.length} agents`;
+}
+
+function matchesAgentFilter(row, filter) {
+  if (filter === "active") {
+    return row.status === "工作中";
+  }
+  if (filter === "done") {
+    return row.status === "已完成";
+  }
+  if (filter === "pending") {
+    return row.status === "等待中" || row.status === "未运行";
+  }
+  if (filter === "failed") {
+    return row.status === "出错";
+  }
+  return true;
 }
 
 function renderDetails(flow, run, events, eventByNode) {

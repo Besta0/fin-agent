@@ -164,6 +164,13 @@
               <h2>Agent 协作队列</h2>
               <span id="agentCount">0 agents</span>
             </div>
+            <div class="agent-filter-bar" aria-label="Agent 状态筛选">
+              <button type="button" data-agent-filter="all">全部</button>
+              <button type="button" data-agent-filter="active">运行中</button>
+              <button type="button" data-agent-filter="done">已完成</button>
+              <button type="button" data-agent-filter="pending">待处理</button>
+              <button type="button" data-agent-filter="failed">失败</button>
+            </div>
             <div id="agentGrid" class="agent-grid"></div>
           </section>
 

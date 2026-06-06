@@ -599,6 +599,31 @@ code {
   font-weight: 650;
 }
 
+.agent-filter-bar {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.agent-filter-bar button {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 8px;
+  background: var(--surface);
+  color: var(--text);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.agent-filter-bar button:hover,
+.agent-filter-bar button.active {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
 .agent-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1078,6 +1103,10 @@ code {
   }
 
   .template-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .agent-filter-bar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
