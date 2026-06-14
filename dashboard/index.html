@@ -180,6 +180,13 @@
               <span id="detailStatus">等待中</span>
             </div>
             <p id="detailMission" class="muted"></p>
+            <div class="detail-tools">
+              <label class="detail-search">
+                <span>过滤输出</span>
+                <input id="detailFilterInput" type="search" placeholder="搜索字段或内容，例如 risk / PE / news" autocomplete="off" />
+              </label>
+              <button id="clearDetailFilterBtn" class="secondary-button" type="button">清空</button>
+            </div>
             <div id="detailContent" class="detail-content"></div>
           </section>
 
@@ -222,6 +229,7 @@
             <div class="report-actions">
               <span id="reportStatus">等待报告生成</span>
               <button id="reloadReportBtn" type="button">读取报告</button>
+              <button id="exportReportBtn" type="button">导出 HTML</button>
             </div>
           </div>
           <div id="reportMeta" class="report-meta"></div>

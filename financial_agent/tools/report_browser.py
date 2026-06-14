@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import html
 import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from financial_agent.tools.memory import safe_user_id, user_reports_dir
+from financial_agent.tools.memory import safe_user_id, user_dir, user_reports_dir
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 REPORT_BROWSER_KEYWORDS = [
@@ -21,6 +25,20 @@ REPORT_BROWSER_KEYWORDS = [
 ]
 
 REPORT_LIST_KEYWORDS = ["报告列表", "所有报告", "查看报告列表", "列出报告", "reports"]
+
+REPORT_EXPORT_KEYWORDS = [
+    "导出报告",
+    "报告导出",
+    "导出最近报告",
+    "导出最新报告",
+    "下载报告",
+    "报告下载",
+    "生成报告html",
+    "生成报告 html",
+    "导出html",
+    "导出 html",
+    "打印报告",
+]
 
 REPORT_ACTION_KEYWORDS = ["打开", "查看", "最近", "最新", "详情", "阅读"]
 
@@ -82,8 +100,20 @@ def is_report_list_intent(text: str) -> bool:
     return any(keyword.lower().replace(" ", "") in compact for keyword in REPORT_LIST_KEYWORDS)
 
 
+def is_report_export_intent(text: str) -> bool:
+    normalized = text.strip().lower()
+    if not normalized:
+        return False
+    compact = "".join(normalized.split())
+    return any(keyword.lower().replace(" ", "") in compact for keyword in REPORT_EXPORT_KEYWORDS)
+
+
 def _safe_ticker(ticker: str) -> str:
     return "".join(ch for ch in ticker.upper() if ch.isalnum() or ch in {".", "-"})
+
+
+def report_exports_dir(user_id: str | None = None) -> Path:
+    return user_dir(user_id) / "exports"
 
 
 def _extract_ticker(text: str) -> str:
@@ -145,6 +175,31 @@ def _latest_report_path(user_id: str | None = None, ticker: str | None = None) -
     if not reports:
         return None
     return Path(reports[0]["path"])
+
+
+def _normalize_report_path(path: str | Path, user_id: str | None = None) -> Path | None:
+    safe_id = safe_user_id(user_id)
+    candidate = Path(path)
+    if not candidate.is_absolute():
+        candidate = PROJECT_ROOT / candidate
+    candidate = candidate.resolve()
+    reports_root = (PROJECT_ROOT / user_reports_dir(safe_id)).resolve()
+    if reports_root not in candidate.parents and candidate != reports_root:
+        return None
+    return candidate
+
+
+def _report_path_for_query(
+    query: str,
+    user_id: str | None = None,
+    report_path: str | Path | None = None,
+) -> Path | None:
+    if report_path:
+        return _normalize_report_path(report_path, user_id=user_id)
+    path = _latest_report_path(user_id, ticker=_extract_ticker(query) or None)
+    if path is None:
+        return None
+    return _normalize_report_path(path, user_id=user_id)
 
 
 def _heading_level(line: str) -> int | None:
@@ -368,6 +423,149 @@ def _links_table(markdown: str) -> str:
     return "\n".join(rows)
 
 
+def _inline_html(text: str) -> str:
+    source = str(text or "")
+    output = []
+    last_index = 0
+    for match in re.finditer(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", source):
+        output.append(html.escape(source[last_index : match.start()]))
+        title = html.escape(match.group(1))
+        url = html.escape(match.group(2), quote=True)
+        output.append(f'<a href="{url}" target="_blank" rel="noopener noreferrer">{title}</a>')
+        last_index = match.end()
+    output.append(html.escape(source[last_index:]))
+    rendered = "".join(output)
+    rendered = re.sub(r"`([^`]+)`", r"<code>\1</code>", rendered)
+    rendered = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", rendered)
+    return rendered
+
+
+def _markdown_table_to_html(lines: list[str]) -> str:
+    rows = [
+        [
+            cell.strip()
+            for cell in line.strip().strip("|").split("|")
+        ]
+        for line in lines
+        if not re.fullmatch(r"\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*", line)
+    ]
+    rows = [row for row in rows if row]
+    if not rows:
+        return ""
+    header, *body = rows
+    head = "".join(f"<th>{_inline_html(cell)}</th>" for cell in header)
+    body_html = "".join(
+        "<tr>" + "".join(f"<td>{_inline_html(cell)}</td>" for cell in row) + "</tr>"
+        for row in body
+    )
+    return f"<table><thead><tr>{head}</tr></thead><tbody>{body_html}</tbody></table>"
+
+
+def _is_markdown_table(lines: list[str], index: int) -> bool:
+    if index + 1 >= len(lines):
+        return False
+    if "|" not in lines[index] or "|" not in lines[index + 1]:
+        return False
+    return bool(re.fullmatch(r"\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*", lines[index + 1]))
+
+
+def _markdown_to_html(markdown: str) -> str:
+    lines = markdown.splitlines()
+    blocks: list[str] = []
+    paragraph: list[str] = []
+    list_items: list[str] = []
+    list_type = "ul"
+    code_lines: list[str] = []
+    in_code = False
+
+    def flush_paragraph() -> None:
+        nonlocal paragraph
+        if paragraph:
+            blocks.append(f"<p>{_inline_html(' '.join(paragraph))}</p>")
+            paragraph = []
+
+    def flush_list() -> None:
+        nonlocal list_items, list_type
+        if list_items:
+            tag = "ol" if list_type == "ol" else "ul"
+            items = "".join(f"<li>{_inline_html(item)}</li>" for item in list_items)
+            blocks.append(f"<{tag}>{items}</{tag}>")
+            list_items = []
+            list_type = "ul"
+
+    def flush_code() -> None:
+        nonlocal code_lines
+        if code_lines:
+            blocks.append(f"<pre><code>{html.escape(chr(10).join(code_lines))}</code></pre>")
+            code_lines = []
+
+    index = 0
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+
+        if stripped.startswith("```"):
+            flush_paragraph()
+            flush_list()
+            if in_code:
+                flush_code()
+                in_code = False
+            else:
+                in_code = True
+            index += 1
+            continue
+
+        if in_code:
+            code_lines.append(line)
+            index += 1
+            continue
+
+        if not stripped:
+            flush_paragraph()
+            flush_list()
+            index += 1
+            continue
+
+        if _is_markdown_table(lines, index):
+            flush_paragraph()
+            flush_list()
+            table_lines: list[str] = []
+            while index < len(lines) and "|" in lines[index]:
+                table_lines.append(lines[index])
+                index += 1
+            blocks.append(_markdown_table_to_html(table_lines))
+            continue
+
+        heading = re.match(r"^(#{1,4})\s+(.+)$", stripped)
+        if heading:
+            flush_paragraph()
+            flush_list()
+            level = min(len(heading.group(1)), 4)
+            blocks.append(f"<h{level}>{_inline_html(heading.group(2))}</h{level}>")
+            index += 1
+            continue
+
+        ordered = re.match(r"^\d+\.\s+(.+)$", stripped)
+        unordered = re.match(r"^[-*]\s+(.+)$", stripped)
+        if ordered or unordered:
+            flush_paragraph()
+            next_type = "ol" if ordered else "ul"
+            if list_items and list_type != next_type:
+                flush_list()
+            list_type = next_type
+            list_items.append((ordered or unordered).group(1))
+            index += 1
+            continue
+
+        paragraph.append(stripped)
+        index += 1
+
+    flush_paragraph()
+    flush_list()
+    flush_code()
+    return "\n".join(block for block in blocks if block)
+
+
 def _metric_table(markdown: str, ticker: str, kind: str, updated_at: str, title: str) -> str:
     bull, bear = _extract_bull_bear(markdown)
     return "\n".join(
@@ -456,6 +654,7 @@ def _next_actions(ticker: str) -> str:
 - `以前分析过 {safe_ticker} 吗`
 - `为什么 {safe_ticker} 在观察池`
 - `打开 {safe_ticker} 报告`
+- `导出 {safe_ticker} 报告`
 - `报告列表`
 - `投研工作台`
 - `查看观察池`"""
@@ -463,6 +662,404 @@ def _next_actions(ticker: str) -> str:
 
 def _viewer_block(title: str, body: str) -> str:
     return f"## {title}\n\n{body or '暂无。'}"
+
+
+def _export_metric_cards(markdown: str, ticker: str, kind: str, updated_at: str) -> str:
+    bull, bear = _extract_bull_bear(markdown)
+    metrics = [
+        ("Ticker", ticker),
+        ("评级", _extract_rating(markdown)),
+        ("置信度", _extract_confidence(markdown)),
+        ("分析周期", _extract_period(markdown)),
+        ("Bull / Bear", f"{bull} / {bear}"),
+        ("质检状态", _extract_quality_status(markdown)),
+        ("市场 / 行业", f"{_extract_market(markdown)} / {_extract_industry(markdown)}"),
+        ("最新价格", _extract_close(markdown)),
+        ("报告类型", kind),
+        ("源报告时间", updated_at),
+    ]
+    return "\n".join(
+        f"""
+        <div class="metric-card">
+          <span>{html.escape(label)}</span>
+          <strong>{html.escape(str(value or "N/A"))}</strong>
+        </div>
+        """.strip()
+        for label, value in metrics
+    )
+
+
+def _report_export_html(markdown: str, *, ticker: str, kind: str, source_path: Path, exported_at: str) -> str:
+    updated_at = datetime.fromtimestamp(source_path.stat().st_mtime).isoformat(timespec="seconds")
+    title = _report_title(markdown, fallback=f"{ticker} 投研报告")
+    headings = _headings(markdown, limit=30)
+    links = _extract_links(markdown, limit=20)
+    link_items = "\n".join(
+        f"""
+        <li>
+          <a href="{html.escape(link['url'], quote=True)}" target="_blank" rel="noopener noreferrer">
+            {html.escape(link['title'] or link['url'])}
+          </a>
+          <span>{html.escape(" / ".join(item for item in [link.get('publisher'), link.get('date')] if item and item != "N/A") or "来源信息待补充")}</span>
+        </li>
+        """.strip()
+        for link in links
+    )
+    toc_items = "\n".join(f"<li>{html.escape(heading)}</li>" for heading in headings)
+    body_html = _markdown_to_html(markdown)
+    source_text = html.escape(str(source_path))
+    return f"""<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{html.escape(title)}</title>
+    <style>
+      :root {{
+        --bg: #f5f7fb;
+        --paper: #ffffff;
+        --ink: #111827;
+        --muted: #667085;
+        --line: #d8e0ea;
+        --blue: #2563eb;
+        --teal: #0f766e;
+        --soft: #f8fafc;
+      }}
+      * {{ box-sizing: border-box; }}
+      body {{
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        letter-spacing: 0;
+      }}
+      .page {{
+        width: min(1080px, calc(100vw - 32px));
+        margin: 0 auto;
+        padding: 28px 0 44px;
+      }}
+      .hero,
+      .section {{
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+      }}
+      .hero {{
+        padding: 28px;
+        margin-bottom: 14px;
+      }}
+      .eyebrow {{
+        margin: 0 0 8px;
+        color: var(--teal);
+        font-size: 13px;
+        font-weight: 800;
+      }}
+      h1, h2, h3, p {{ margin: 0; }}
+      h1 {{ font-size: 34px; line-height: 1.15; }}
+      .subtitle {{
+        margin-top: 10px;
+        color: var(--muted);
+        line-height: 1.6;
+      }}
+      .meta-line {{
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 13px;
+      }}
+      .metric-grid {{
+        display: grid;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 14px;
+      }}
+      .metric-card {{
+        min-height: 76px;
+        padding: 13px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+      }}
+      .metric-card span {{
+        display: block;
+        margin-bottom: 8px;
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }}
+      .metric-card strong {{
+        display: block;
+        overflow-wrap: anywhere;
+        font-size: 15px;
+      }}
+      .layout {{
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 280px;
+        gap: 14px;
+        align-items: start;
+      }}
+      .section {{
+        padding: 24px;
+      }}
+      .sidebar {{
+        display: grid;
+        gap: 14px;
+        position: sticky;
+        top: 16px;
+      }}
+      .side-box {{
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--paper);
+        padding: 16px;
+      }}
+      .side-box h2 {{
+        margin-bottom: 10px;
+        font-size: 15px;
+      }}
+      .side-box ol,
+      .side-box ul {{
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding-left: 18px;
+        color: #334155;
+        font-size: 13px;
+        line-height: 1.45;
+      }}
+      .side-box span {{
+        display: block;
+        margin-top: 3px;
+        color: var(--muted);
+        font-size: 12px;
+      }}
+      .report-body {{
+        font-size: 15px;
+        line-height: 1.72;
+      }}
+      .report-body h1,
+      .report-body h2,
+      .report-body h3,
+      .report-body h4 {{
+        margin: 24px 0 10px;
+        line-height: 1.28;
+      }}
+      .report-body h1:first-child,
+      .report-body h2:first-child {{
+        margin-top: 0;
+      }}
+      .report-body h1 {{ font-size: 28px; }}
+      .report-body h2 {{ font-size: 22px; }}
+      .report-body h3 {{ font-size: 17px; }}
+      .report-body p,
+      .report-body ul,
+      .report-body ol,
+      .report-body table,
+      .report-body pre {{
+        margin: 0 0 14px;
+      }}
+      .report-body table {{
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }}
+      .report-body th,
+      .report-body td {{
+        padding: 9px;
+        border: 1px solid var(--line);
+        vertical-align: top;
+      }}
+      .report-body th {{
+        background: var(--soft);
+        text-align: left;
+      }}
+      code {{
+        display: inline-block;
+        max-width: 100%;
+        padding: 2px 5px;
+        border: 1px solid #dbe3ef;
+        border-radius: 5px;
+        background: #eef2f7;
+        overflow-wrap: anywhere;
+      }}
+      pre {{
+        overflow: auto;
+        padding: 12px;
+        border-radius: 8px;
+        background: #0f172a;
+        color: #e5e7eb;
+      }}
+      a {{ color: var(--blue); text-decoration: none; }}
+      a:hover {{ text-decoration: underline; }}
+      @media (max-width: 900px) {{
+        .metric-grid,
+        .layout {{
+          grid-template-columns: 1fr;
+        }}
+        .sidebar {{
+          position: static;
+        }}
+      }}
+      @media print {{
+        body {{ background: #ffffff; }}
+        .page {{ width: auto; padding: 0; }}
+        .hero,
+        .section,
+        .side-box,
+        .metric-card {{
+          border-color: #d1d5db;
+          box-shadow: none;
+        }}
+        .sidebar {{
+          position: static;
+        }}
+        a {{ color: inherit; }}
+      }}
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <p class="eyebrow">Fin Agent Report Export</p>
+        <h1>{html.escape(title)}</h1>
+        <p class="subtitle">这是一份从本地 Markdown 报告导出的独立 HTML 文件，可直接在浏览器中阅读或打印为 PDF。</p>
+        <div class="meta-line">
+          <span>源文件：<code>{source_text}</code></span>
+          <span>导出时间：{html.escape(exported_at)}</span>
+        </div>
+      </header>
+      <section class="metric-grid">
+        {_export_metric_cards(markdown, ticker=ticker, kind=kind, updated_at=updated_at)}
+      </section>
+      <div class="layout">
+        <article class="section report-body">
+          {body_html}
+        </article>
+        <aside class="sidebar">
+          <section class="side-box">
+            <h2>正文目录</h2>
+            <ol>{toc_items or "<li>暂无目录</li>"}</ol>
+          </section>
+          <section class="side-box">
+            <h2>资料链接</h2>
+            <ul>{link_items or "<li>暂无外部链接</li>"}</ul>
+          </section>
+        </aside>
+      </div>
+    </main>
+  </body>
+</html>
+"""
+
+
+def export_report_html(
+    query: str = "导出最近报告",
+    user_id: str | None = None,
+    report_path: str | Path | None = None,
+) -> dict[str, Any]:
+    safe_id = safe_user_id(user_id)
+    source_path = _report_path_for_query(query, user_id=safe_id, report_path=report_path)
+    ticker = _extract_ticker(query)
+    if source_path is None:
+        return {
+            "ok": False,
+            "status": "missing_report",
+            "message": f"没有找到 {ticker or '最近'} 的本地报告。",
+            "ticker": ticker or "",
+        }
+    if not source_path.exists() or not source_path.is_file():
+        return {
+            "ok": False,
+            "status": "missing_file",
+            "message": "报告文件不存在。",
+            "path": str(source_path),
+            "ticker": ticker or "",
+        }
+
+    try:
+        markdown = source_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {
+            "ok": False,
+            "status": "read_error",
+            "message": str(exc),
+            "path": str(source_path),
+            "ticker": ticker or "",
+        }
+
+    ticker = source_path.stem.split("_", 1)[0] if source_path.stem else ticker or "REPORT"
+    kind = "质检版" if "_verified_" in source_path.stem else "初稿"
+    exported_at = datetime.now().isoformat(timespec="seconds")
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = report_exports_dir(safe_id)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"{_safe_ticker(ticker) or 'REPORT'}_{stamp}.html"
+    title = _report_title(markdown, fallback=f"{ticker} 投研报告")
+    output_path.write_text(
+        _report_export_html(
+            markdown,
+            ticker=ticker,
+            kind=kind,
+            source_path=source_path,
+            exported_at=exported_at,
+        ),
+        encoding="utf-8",
+    )
+    return {
+        "ok": True,
+        "status": "exported",
+        "ticker": ticker,
+        "title": title,
+        "kind": kind,
+        "path": str(output_path),
+        "filename": output_path.name,
+        "source_path": str(source_path),
+        "exported_at": exported_at,
+        "rating": _extract_rating(markdown),
+        "confidence": _extract_confidence(markdown),
+        "quality_status": _extract_quality_status(markdown),
+        "link_count": len(_extract_links(markdown, limit=20)),
+    }
+
+
+def format_report_export_response(query: str, user_id: str | None = None) -> str:
+    safe_id = safe_user_id(user_id)
+    result = export_report_html(query=query, user_id=safe_id)
+    if not result.get("ok"):
+        ticker = result.get("ticker") or _extract_ticker(query) or "NVDA"
+        return f"""# 报告导出
+
+{result.get("message") or "没有找到可导出的本地报告。"}
+
+可复制：
+
+- `帮我分析一下 {ticker} 未来一个月走势`
+- `报告列表`
+- `投研工作台`"""
+
+    return f"""# 报告导出完成
+
+| 项目 | 值 |
+|---|---|
+| 用户 | `{safe_id}` |
+| 标的 | **{result.get('ticker', 'N/A')}** |
+| 标题 | **{_table_cell(str(result.get('title') or 'N/A'))}** |
+| 评级 / 置信度 | **{result.get('rating', 'N/A')} / {result.get('confidence', 'N/A')}** |
+| 质检状态 | **{result.get('quality_status', 'N/A')}** |
+| 外部链接 | **{result.get('link_count', 0)}** 条 |
+| 导出文件 | `{result.get('path')}` |
+| 源报告 | `{result.get('source_path')}` |
+
+这是一份独立 HTML 文件，可以在浏览器里打开阅读，也可以用浏览器打印为 PDF。
+
+## 下一步动作
+
+- `打开 {result.get('ticker', 'NVDA')} 报告`
+- `报告列表`
+- `帮我重新分析 {result.get('ticker', 'NVDA')}，重点看估值压力和观点变化`
+- `投研工作台`"""
 
 
 def format_report_browser_response(query: str, user_id: str | None = None) -> str:

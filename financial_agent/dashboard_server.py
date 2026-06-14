@@ -25,6 +25,7 @@ from financial_agent.tools.report_browser import (
     _extract_quality_status,
     _extract_rating,
     _report_title,
+    export_report_html,
 )
 from financial_agent.tools.run_dashboard import (
     append_run_event,
@@ -134,6 +135,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._send_json(_report_payload(user_id, run_id or None))
             return
 
+        if path == "/api/report/export":
+            self._handle_report_export(user_id, run_id or None)
+            return
+
         if path == "/api/compare":
             self._send_json(_compare_payload(user_id, run_id or None))
             return
@@ -180,6 +185,15 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _send_html(self, body: str, status: HTTPStatus = HTTPStatus.OK) -> None:
+        encoded = body.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(encoded)
+
     def _read_json_body(self) -> dict | None:
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -193,6 +207,27 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         except (json.JSONDecodeError, UnicodeDecodeError):
             return None
         return data if isinstance(data, dict) else None
+
+    def _handle_report_export(self, user_id: str, run_id: str | None) -> None:
+        run = load_run(user_id, run_id)
+        if not run:
+            self._send_json({"ok": False, "message": "没有找到对应 run。"}, HTTPStatus.NOT_FOUND)
+            return
+
+        query = f"导出 {run.get('ticker') or '最近'} 报告"
+        result = export_report_html(query=query, user_id=user_id, report_path=run.get("report_path"))
+        if not result.get("ok"):
+            self._send_json(result, HTTPStatus.NOT_FOUND)
+            return
+
+        path = Path(str(result.get("path") or "")).expanduser()
+        try:
+            html_text = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            self._send_json({"ok": False, "message": str(exc), "path": str(path)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return
+
+        self._send_html(html_text)
 
 
 def _first(query: dict[str, list[str]], key: str, fallback: str) -> str:

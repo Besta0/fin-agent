@@ -22,8 +22,10 @@ from financial_agent.tools.memory import (
     update_preferences_from_query,
 )
 from financial_agent.tools.report_browser import (
+    format_report_export_response,
     format_report_browser_response,
     format_report_list_response,
+    is_report_export_intent,
     is_report_browser_intent,
     is_report_list_intent,
     list_reports,
@@ -349,6 +351,13 @@ def _report_actions(ticker: str) -> list[cl.Action]:
             icon="refresh-cw",
         ),
         cl.Action(
+            name="report_action",
+            payload={"intent": "export_report", "ticker": safe_ticker},
+            label="导出报告",
+            tooltip=f"导出 {safe_ticker} 的独立 HTML 报告",
+            icon="download",
+        ),
+        cl.Action(
             name="quick_action",
             payload={"intent": "reports"},
             label="报告库",
@@ -405,6 +414,13 @@ def _run_dashboard_actions(run_id: str, ticker: str = "NVDA") -> list[cl.Action]
         ),
         cl.Action(
             name="report_action",
+            payload={"intent": "export_report", "ticker": safe_ticker},
+            label="导出报告",
+            tooltip=f"导出 {safe_ticker} 的独立 HTML 报告",
+            icon="download",
+        ),
+        cl.Action(
+            name="report_action",
             payload={"intent": "reanalyze", "ticker": safe_ticker},
             label="重新分析",
             tooltip=f"重新运行 {safe_ticker} 的完整多 Agent 投研流程",
@@ -421,6 +437,13 @@ def _report_library_actions() -> list[cl.Action]:
             label="打开最近",
             tooltip="进入最近一份报告阅读页",
             icon="book-open",
+        ),
+        cl.Action(
+            name="report_action",
+            payload={"intent": "export_latest"},
+            label="导出最近",
+            tooltip="导出最近一份报告为独立 HTML",
+            icon="download",
         ),
         cl.Action(
             name="quick_action",
@@ -1400,6 +1423,21 @@ async def on_report_action(action: cl.Action) -> None:
         ).send()
         return
 
+    if intent == "export_latest":
+        report_ticker = resolve_report_ticker("导出最近报告", user_id=user_id)
+        await cl.Message(
+            content=format_report_export_response("导出最近报告", user_id=user_id),
+            actions=_report_actions(report_ticker),
+        ).send()
+        return
+
+    if intent == "export_report":
+        await cl.Message(
+            content=format_report_export_response(f"导出 {ticker} 报告", user_id=user_id),
+            actions=_report_actions(ticker),
+        ).send()
+        return
+
     if intent == "watchlist":
         await cl.Message(
             content=format_watchlist_response(user_id=user_id),
@@ -1451,6 +1489,14 @@ async def on_message(message: cl.Message) -> None:
 
     if is_report_list_intent(user_query):
         await cl.Message(content=format_report_list_response(user_id), actions=_report_library_actions()).send()
+        return
+
+    if is_report_export_intent(user_query):
+        report_ticker = resolve_report_ticker(user_query, user_id=user_id)
+        await cl.Message(
+            content=format_report_export_response(user_query, user_id=user_id),
+            actions=_report_actions(report_ticker),
+        ).send()
         return
 
     if is_report_browser_intent(user_query):

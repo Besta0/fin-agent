@@ -18,6 +18,7 @@ const state = {
   settings: null,
   settingsOpen: localStorage.getItem("finAgentSettingsOpen") === "true",
   agentFilter: initialAgentFilter,
+  detailFilter: localStorage.getItem("finAgentDetailFilter") || "",
   refreshTimer: null,
 };
 
@@ -80,6 +81,8 @@ const els = {
   detailTitle: document.getElementById("detailTitle"),
   detailStatus: document.getElementById("detailStatus"),
   detailMission: document.getElementById("detailMission"),
+  detailFilterInput: document.getElementById("detailFilterInput"),
+  clearDetailFilterBtn: document.getElementById("clearDetailFilterBtn"),
   detailContent: document.getElementById("detailContent"),
   eventCount: document.getElementById("eventCount"),
   timeline: document.getElementById("timeline"),
@@ -98,6 +101,7 @@ const els = {
   compareTable: document.getElementById("compareTable"),
   reportStatus: document.getElementById("reportStatus"),
   reloadReportBtn: document.getElementById("reloadReportBtn"),
+  exportReportBtn: document.getElementById("exportReportBtn"),
   reportMeta: document.getElementById("reportMeta"),
   reportBody: document.getElementById("reportBody"),
   reportPath: document.getElementById("reportPath"),
@@ -128,6 +132,7 @@ function bindEvents() {
 
   els.refreshBtn.addEventListener("click", loadPayload);
   els.reloadReportBtn.addEventListener("click", () => loadReport({ force: true }));
+  els.exportReportBtn.addEventListener("click", exportCurrentReport);
   els.settingsToggleBtn.addEventListener("click", toggleSettingsPanel);
   els.settingsProvider.addEventListener("change", handleSettingsProviderChange);
   els.settingsModel.addEventListener("change", handleSettingsModelChange);
@@ -145,6 +150,21 @@ function bindEvents() {
       localStorage.setItem("finAgentAgentFilter", state.agentFilter);
       renderDashboard();
     });
+  });
+  els.detailFilterInput.addEventListener("input", () => {
+    state.detailFilter = els.detailFilterInput.value.trim();
+    if (state.detailFilter) {
+      localStorage.setItem("finAgentDetailFilter", state.detailFilter);
+    } else {
+      localStorage.removeItem("finAgentDetailFilter");
+    }
+    renderDashboard();
+  });
+  els.clearDetailFilterBtn.addEventListener("click", () => {
+    state.detailFilter = "";
+    localStorage.removeItem("finAgentDetailFilter");
+    renderDashboard();
+    els.detailFilterInput.focus();
   });
 
   els.startRunBtn.addEventListener("click", startRun);
@@ -496,6 +516,48 @@ async function loadReport({ force = false } = {}) {
   }
 }
 
+async function exportCurrentReport() {
+  const run = state.payload?.run;
+  if (!run || !run.run_id || (!state.report && !run.report_path)) {
+    return;
+  }
+
+  els.exportReportBtn.disabled = true;
+  els.reportStatus.textContent = "导出中";
+  try {
+    const params = new URLSearchParams({ user_id: state.userId });
+    params.set("run_id", run.run_id);
+    const response = await fetch(`/api/report/export?${params.toString()}`, { cache: "no-store" });
+    if (!response.ok) {
+      let message = `导出失败：${response.status}`;
+      try {
+        const data = await response.json();
+        message = data.message || data.error || message;
+      } catch (error) {
+        // ignore JSON parse errors
+      }
+      els.reportStatus.textContent = message;
+      return;
+    }
+
+    const html = await response.text();
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const win = window.open(url, "_blank", "noopener,noreferrer");
+    if (!win) {
+      els.reportStatus.textContent = "导出完成，但浏览器拦截了新窗口。";
+      window.location.href = url;
+      return;
+    }
+    els.reportStatus.textContent = "导出完成，已打开新页面。";
+    window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
+  } catch (error) {
+    els.reportStatus.textContent = `导出失败：${error.message}`;
+  } finally {
+    els.exportReportBtn.disabled = false;
+  }
+}
+
 async function syncCompareForCurrentRun() {
   const run = state.payload?.run;
   if (!run || !run.ticker) {
@@ -667,6 +729,10 @@ function renderEmpty(flow) {
   els.updatedText.textContent = "N/A";
   els.agentGrid.innerHTML = `<div class="empty">暂无 Agent 运行记录。</div>`;
   renderAgentFilters([]);
+  els.detailTitle.textContent = "Agent 详情";
+  els.detailStatus.textContent = "等待中";
+  els.detailMission.textContent = "";
+  syncDetailFilterControls(false);
   els.detailContent.innerHTML = `<div class="empty">完成一次分析后，这里会展示每个 Agent 的结构化输出。</div>`;
   els.timeline.innerHTML = `<div class="empty">等待运行事件。</div>`;
   renderDebate({}, {});
@@ -748,6 +814,14 @@ function matchesAgentFilter(row, filter) {
   return true;
 }
 
+function syncDetailFilterControls(enabled) {
+  els.detailFilterInput.disabled = !enabled;
+  els.clearDetailFilterBtn.disabled = !enabled || !state.detailFilter;
+  if (els.detailFilterInput.value !== state.detailFilter) {
+    els.detailFilterInput.value = state.detailFilter;
+  }
+}
+
 function renderDetails(flow, run, events, eventByNode) {
   const selected = flow.find((agent) => agent.node === state.selectedNode) || flow[0];
   if (!selected) {
@@ -763,6 +837,7 @@ function renderDetails(flow, run, events, eventByNode) {
   els.detailMission.textContent = selected.mission;
 
   if (!event) {
+    syncDetailFilterControls(false);
     els.detailContent.innerHTML = `
       <div class="kv-row">
         <div class="kv-key">运行状态</div>
@@ -773,6 +848,7 @@ function renderDetails(flow, run, events, eventByNode) {
     return;
   }
 
+  syncDetailFilterControls(true);
   els.detailContent.innerHTML = `
     <div class="kv-row">
       <div class="kv-key">开始时间</div>
@@ -791,7 +867,7 @@ function renderDetails(flow, run, events, eventByNode) {
       <div class="kv-value">${escapeHtml(stripMarkdown(event.summary || "N/A"))}</div>
     </div>
     ${nodeError ? renderErrorBox(nodeError) : ""}
-    ${renderObject(event.output)}
+    ${renderObject(event.output, state.detailFilter)}
   `;
 }
 
@@ -1036,6 +1112,7 @@ function renderReportPanel(pendingPayload = null) {
   const run = state.payload?.run;
   const report = state.report;
   els.reloadReportBtn.disabled = !run;
+  els.exportReportBtn.disabled = !run || (!report && !run.report_path);
 
   if (!run) {
     els.reportStatus.textContent = "暂无 run";
@@ -1121,12 +1198,22 @@ function renderList(titleA, listA, titleB, listB) {
   return first || second ? `${first}${second}` : `<p class="muted">暂无结构化要点。</p>`;
 }
 
-function renderObject(value) {
+function renderObject(value, filterText = "") {
+  const filter = normalizeDetailFilter(filterText);
   if (!value || typeof value !== "object") {
-    return `<div class="kv-row"><div class="kv-key">输出</div><div class="kv-value">${escapeHtml(String(value || "N/A"))}</div></div>`;
+    const output = String(value || "N/A");
+    if (filter && !matchesDetailFilter("输出", output, filter)) {
+      return renderDetailFilterEmpty(filterText);
+    }
+    return `<div class="kv-row"><div class="kv-key">输出</div><div class="kv-value">${escapeHtml(output)}</div></div>`;
   }
 
-  return Object.entries(value)
+  const entries = Object.entries(value).filter(([key, item]) => !filter || matchesDetailFilter(key, item, filter));
+  if (entries.length === 0) {
+    return renderDetailFilterEmpty(filterText);
+  }
+
+  return entries
     .map(([key, item]) => {
       return `
         <div class="kv-row">
@@ -1136,6 +1223,22 @@ function renderObject(value) {
       `;
     })
     .join("");
+}
+
+function normalizeDetailFilter(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function matchesDetailFilter(key, value, filter) {
+  const searchable = `${key} ${formatPlain(value)}`.toLowerCase();
+  if (/^[a-z0-9]{1,2}$/.test(filter)) {
+    return searchable.split(/[^a-z0-9]+/).filter(Boolean).includes(filter);
+  }
+  return searchable.includes(filter);
+}
+
+function renderDetailFilterEmpty(filterText) {
+  return `<div class="empty detail-filter-empty">没有匹配“${escapeHtml(filterText)}”的输出字段。</div>`;
 }
 
 function formatValue(value) {
