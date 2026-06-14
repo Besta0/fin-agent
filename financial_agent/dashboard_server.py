@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+from financial_agent.entry_router import classify_entry_query
 from financial_agent.tools.dashboard_settings import (
     payload_to_llm_config,
     save_user_model_settings,
@@ -96,6 +97,20 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         user_id = safe_user_id(str(body.get("user_id") or "chainlit"))
         if not query:
             self._send_json({"error": "query is required."}, HTTPStatus.BAD_REQUEST)
+            return
+
+        entry_route = classify_entry_query(query)
+        if not entry_route.should_start_research:
+            self._send_json(
+                {
+                    "ok": False,
+                    "route": entry_route.route,
+                    "reason": entry_route.reason,
+                    "message": entry_route.response,
+                    "error": entry_route.response,
+                },
+                HTTPStatus.UNPROCESSABLE_ENTITY,
+            )
             return
 
         record = create_run_record(user_id, query)

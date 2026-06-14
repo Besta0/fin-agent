@@ -4,6 +4,7 @@ import asyncio
 import os
 import sys
 
+from financial_agent.entry_router import classify_entry_query
 from financial_agent.help import HELP_MESSAGE, is_help_intent
 from financial_agent.tools.dashboard import format_dashboard_response, is_dashboard_intent
 from financial_agent.tools.memory import (
@@ -100,6 +101,11 @@ async def main() -> int:
 
     if is_watchlist_intent(query):
         print(format_watchlist_response(limit=watchlist_limit_from_query(query), user_id=user_id))
+        return 0
+
+    entry_route = classify_entry_query(query)
+    if not entry_route.should_start_research:
+        print(entry_route.response)
         return 0
 
     from financial_agent.graph.workflow import build_research_graph

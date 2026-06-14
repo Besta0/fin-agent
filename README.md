@@ -54,6 +54,7 @@ User
 Chainlit UI
   ↓
 Intent Router
+  ├─ Entry Scope Guard → Research / Missing Ticker / Product / Out-of-scope
   ├─ Help Intent → Capability Guide
   ├─ Watchlist Intent → Watchlist Table
   ├─ Watchlist Detail Intent → Watchlist Item Detail
@@ -120,6 +121,28 @@ company_name
 market
 horizon
 ticker_resolution
+```
+
+### Entry Scope Guard
+
+文件：`financial_agent/entry_router.py`
+
+职责：
+
+- 在创建 run 和启动 LangGraph 之前先判断用户问题是否属于项目范围
+- 使用统一入口分类 prompt 描述边界：`research`、`missing_ticker`、`product`、`out_of_scope`
+- 默认用本地规则完成零 token 分类，避免无关请求消耗后续 Agent 和 LLM 调用
+- 对缺少 ticker 的投研请求直接要求用户补充标的
+- 对写代码、翻译、天气、旅游、闲聊等无关请求返回固定项目范围说明
+- Chainlit、CLI、独立看板 `/api/run/start` 共用同一套入口判断
+
+输出字段：
+
+```python
+route
+should_start_research
+reason
+response
 ```
 
 ### Market Agent
@@ -835,6 +858,7 @@ Agent 看板
 
 - 中文自然语言输入
 - Help Intent：用户问“你能做什么 / 怎么用 / 帮助”时直接返回功能说明
+- Entry Scope Guard：创建 run 前先判断是否需要启动研究；无关请求和缺 ticker 请求直接返回说明
 - Dashboard Intent：用户问“投研工作台 / dashboard / 仪表盘”时返回观察池、记忆库和最近报告总览
 - Report Browser Intent：用户问“打开最近报告 / 打开 NVDA 报告 / 打开英伟达报告 / 报告列表”时返回产品化报告阅读页或报告列表
 - Settings Intent：用户问“模型设置 / 测试模型连接 / 小米配置”时返回 provider 配置状态和连接测试结果

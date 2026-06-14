@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import re
 
+from financial_agent.entry_router import format_missing_ticker_response, format_out_of_scope_response
 from financial_agent.graph.state import ResearchState
 from financial_agent.llm import get_chat_model
 
@@ -113,30 +114,11 @@ def _looks_like_research_query(query: str) -> bool:
 
 
 def _missing_ticker_response() -> str:
-    return """我理解你想做股票投研分析，但还没有识别出明确的公司或 ticker。
-
-为了避免后面的行情、技术面、基本面 Agent 跑偏，请你补充一个股票代码或公司名。
-
-你可以这样问：
-
-- 帮我分析一下 NVDA 未来一个月走势
-- 看看闪迪最近怎么样
-- 帮我分析一下特斯拉是偏多还是偏空
-- 帮我看一下微软最近的风险点"""
+    return format_missing_ticker_response()
 
 
 def _non_research_response() -> str:
-    return """这个问题看起来不是股票、公司或市场投研请求，所以我不会启动后面的投研 Agent。
-
-我是 Fin Agent，当前主要负责股票投研分析。你可以给我一个公司名或 ticker，我会帮你拉取行情、分析技术面和基本面、整理新闻风险、生成多空观点、更新观察池并输出中文报告。
-
-你可以这样问：
-
-- 帮我分析一下 NVDA 未来一个月走势
-- 看看闪迪最近怎么样
-- 英伟达现在还值得继续跟踪吗
-
-如果你想了解我的能力，可以输入：你能做什么。"""
+    return format_out_of_scope_response()
 
 
 def _clean_json(content: str) -> str:

@@ -453,7 +453,7 @@ async function postJson(url, payload) {
   });
   const data = await response.json();
   if (!response.ok) {
-    throw new Error(data.error || `Request failed: ${response.status}`);
+    throw new Error(data.message || data.error || `Request failed: ${response.status}`);
   }
   return data;
 }

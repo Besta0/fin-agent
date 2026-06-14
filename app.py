@@ -3,6 +3,7 @@ from __future__ import annotations
 import chainlit as cl
 from chainlit.input_widget import Select, Slider, TextInput
 
+from financial_agent.entry_router import classify_entry_query
 from financial_agent.graph.workflow import build_research_graph
 from financial_agent.help import HELP_MESSAGE, is_help_intent
 from financial_agent.llm import (
@@ -1541,6 +1542,14 @@ async def on_message(message: cl.Message) -> None:
         await cl.Message(
             content=format_watchlist_response(limit=limit, user_id=user_id),
             actions=_watchlist_actions(_top_watchlist_ticker(user_id)),
+        ).send()
+        return
+
+    entry_route = classify_entry_query(user_query)
+    if not entry_route.should_start_research:
+        await cl.Message(
+            content=entry_route.response,
+            actions=_product_landing_actions(user_id),
         ).send()
         return
 
