@@ -410,7 +410,7 @@ function applyQueryTemplate(button) {
     return;
   }
   els.queryInput.value = template;
-  els.launchStatus.textContent = "已填入研究模板，可以直接启动，也可以继续修改。";
+  setLaunchStatus("已填入研究模板，可以直接启动，也可以继续修改。", "info");
   els.queryInput.focus();
 }
 
@@ -451,11 +451,24 @@ async function postJson(url, payload) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
-  const data = await response.json();
+  let data = {};
+  try {
+    data = await response.json();
+  } catch (error) {
+    data = {};
+  }
   if (!response.ok) {
-    throw new Error(data.message || data.error || `Request failed: ${response.status}`);
+    const error = new Error(data.message || data.error || `Request failed: ${response.status}`);
+    error.status = response.status;
+    error.payload = data;
+    throw error;
   }
   return data;
+}
+
+function setLaunchStatus(message, tone = "info") {
+  els.launchStatus.textContent = message || "";
+  els.launchStatus.className = `launch-status ${tone}`;
 }
 
 async function syncReportForCurrentRun() {
@@ -619,7 +632,7 @@ async function syncWatchlistForCurrentUser() {
 async function startRun() {
   const query = els.queryInput.value.trim();
   if (!query) {
-    els.launchStatus.textContent = "请输入一个股票研究问题。";
+    setLaunchStatus("请输入一个股票研究问题，例如：帮我分析一下 NVDA 未来一个月走势。", "warning");
     return;
   }
 
@@ -629,7 +642,7 @@ async function startRun() {
     : "";
   els.startRunBtn.disabled = true;
   els.startRunBtn.textContent = "启动中";
-  els.launchStatus.textContent = `${launchPrefix}正在创建 run，并启动多 Agent 工作流...`;
+  setLaunchStatus(`${launchPrefix}正在创建 run，并启动多 Agent 工作流...`, "loading");
   try {
     const data = await postJson("/api/run/start", {
       user_id: state.userId || "chainlit",
@@ -645,11 +658,13 @@ async function startRun() {
     state.watchlistKey = "";
     localStorage.setItem("finAgentDashboardUser", state.userId);
     els.queryInput.value = "";
-    els.launchStatus.textContent = `已启动 run ${data.run_id}，看板会自动刷新。`;
+    setLaunchStatus(`已启动 run ${data.run_id}，看板会自动刷新。`, "success");
     await loadUsers();
     await loadPayload();
   } catch (error) {
-    els.launchStatus.textContent = `启动失败：${error.message}`;
+    const route = error.payload?.route || "";
+    const tone = ["missing_ticker", "out_of_scope", "product"].includes(route) ? "warning" : "error";
+    setLaunchStatus(error.message, tone);
   } finally {
     els.startRunBtn.disabled = false;
     els.startRunBtn.textContent = "启动研究";
@@ -934,7 +949,7 @@ function renderWatchlistPanel(payload = null) {
   document.querySelectorAll("[data-watchlist-query]").forEach((button) => {
     button.addEventListener("click", () => {
       els.queryInput.value = button.getAttribute("data-watchlist-query") || "";
-      els.launchStatus.textContent = "已填入复盘问题，可以直接启动研究。";
+      setLaunchStatus("已填入复盘问题，可以直接启动研究。", "info");
       els.queryInput.focus();
     });
   });

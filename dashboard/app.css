@@ -249,6 +249,50 @@ h3 {
   width: 100%;
 }
 
+.launch-status {
+  min-height: 92px;
+  margin: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.launch-status.info {
+  border-color: var(--border);
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
+.launch-status.loading {
+  border-color: #bfdbfe;
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.launch-status.success {
+  border-color: #a7f3d0;
+  background: var(--teal-soft);
+  color: var(--teal);
+}
+
+.launch-status.warning {
+  border-color: #fed7aa;
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+.launch-status.error {
+  border-color: #fecaca;
+  background: var(--red-soft);
+  color: var(--red);
+}
+
 .settings-panel {
   margin-bottom: 12px;
 }
