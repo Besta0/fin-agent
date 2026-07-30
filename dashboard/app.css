@@ -173,7 +173,7 @@ h3 {
 .launch-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(220px, 0.32fr);
-  align-items: stretch;
+  align-items: start;
   gap: 14px;
   margin-bottom: 12px;
   padding: 14px 16px;
@@ -181,6 +181,7 @@ h3 {
 
 .launch-main {
   display: grid;
+  align-content: start;
   gap: 10px;
   min-width: 0;
 }
@@ -240,7 +241,7 @@ h3 {
 
 .launch-actions {
   display: grid;
-  align-content: end;
+  align-content: start;
   gap: 10px;
   min-width: 0;
 }
@@ -291,6 +292,34 @@ h3 {
   border-color: #fecaca;
   background: var(--red-soft);
   color: var(--red);
+}
+
+.launch-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.launch-suggestion {
+  flex: 1 1 110px;
+  min-width: 0;
+  min-height: 34px;
+  padding: 0 10px;
+  background: var(--surface);
+  color: var(--text);
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.launch-suggestion:hover {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
+.launch-suggestion:active {
+  transform: translateY(1px);
 }
 
 .settings-panel {

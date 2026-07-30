@@ -106,8 +106,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
                     "ok": False,
                     "route": entry_route.route,
                     "reason": entry_route.reason,
+                    "summary": entry_route.summary,
                     "message": entry_route.response,
                     "error": entry_route.response,
+                    "actions": list(entry_route.actions),
                 },
                 HTTPStatus.UNPROCESSABLE_ENTITY,
             )

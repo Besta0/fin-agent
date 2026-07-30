@@ -19,6 +19,7 @@ const state = {
   settingsOpen: localStorage.getItem("finAgentSettingsOpen") === "true",
   agentFilter: initialAgentFilter,
   detailFilter: localStorage.getItem("finAgentDetailFilter") || "",
+  launchActions: [],
   refreshTimer: null,
 };
 
@@ -45,6 +46,12 @@ const agentFilterLabels = {
   failed: "失败",
 };
 
+const defaultResearchActions = [
+  { label: "分析 NVDA", kind: "query", value: "帮我分析一下 NVDA 未来一个月走势" },
+  { label: "分析闪迪", kind: "query", value: "帮我分析一下闪迪未来一个月走势，并整理新闻线索和风险点" },
+  { label: "打开模型设置", kind: "settings", value: "模型设置" },
+];
+
 const els = {
   userSelect: document.getElementById("userSelect"),
   runSelect: document.getElementById("runSelect"),
@@ -53,6 +60,7 @@ const els = {
   queryInput: document.getElementById("queryInput"),
   startRunBtn: document.getElementById("startRunBtn"),
   launchStatus: document.getElementById("launchStatus"),
+  launchSuggestions: document.getElementById("launchSuggestions"),
   launchModelStatus: document.getElementById("launchModelStatus"),
   settingsPanel: document.getElementById("settingsPanel"),
   settingsCurrentLine: document.getElementById("settingsCurrentLine"),
@@ -143,6 +151,15 @@ function bindEvents() {
   els.testSettingsBtn.addEventListener("click", testSettings);
   document.querySelectorAll("[data-query-template]").forEach((button) => {
     button.addEventListener("click", () => applyQueryTemplate(button));
+  });
+  els.launchSuggestions.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-launch-action-index]");
+    if (!button) {
+      return;
+    }
+    const index = Number(button.getAttribute("data-launch-action-index"));
+    const action = state.launchActions[index];
+    applyLaunchAction(action);
   });
   document.querySelectorAll("[data-agent-filter]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -466,9 +483,55 @@ async function postJson(url, payload) {
   return data;
 }
 
-function setLaunchStatus(message, tone = "info") {
+function setLaunchStatus(message, tone = "info", actions = []) {
   els.launchStatus.textContent = message || "";
   els.launchStatus.className = `launch-status ${tone}`;
+  renderLaunchActions(actions);
+}
+
+function renderLaunchActions(actions = []) {
+  state.launchActions = Array.isArray(actions) ? actions.filter((action) => action && action.label) : [];
+  els.launchSuggestions.innerHTML = "";
+  els.launchSuggestions.classList.toggle("is-hidden", state.launchActions.length === 0);
+  for (const [index, action] of state.launchActions.entries()) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "launch-suggestion";
+    button.textContent = action.label;
+    button.setAttribute("data-launch-action-index", String(index));
+    els.launchSuggestions.append(button);
+  }
+}
+
+function applyLaunchAction(action) {
+  if (!action) {
+    return;
+  }
+  const kind = action.kind || "query";
+  const value = action.value || "";
+  if (kind === "settings") {
+    state.settingsOpen = true;
+    localStorage.setItem("finAgentSettingsOpen", "true");
+    setSettingsPanelVisibility();
+    els.settingsPanel.scrollIntoView({ block: "start", behavior: "smooth" });
+    setLaunchStatus("已打开模型设置。你可以选择 provider、模型、base_url，并测试连接。", "info");
+    return;
+  }
+  if (kind === "watchlist") {
+    document.querySelector(".watchlist-panel")?.scrollIntoView({ block: "start", behavior: "smooth" });
+    setLaunchStatus("已定位到观察池。你也可以点击观察池卡片里的复盘按钮生成研究问题。", "info");
+    return;
+  }
+  if (kind === "report") {
+    document.querySelector(".report-panel")?.scrollIntoView({ block: "start", behavior: "smooth" });
+    setLaunchStatus("已定位到报告阅读页。完成研究后这里会展示本次报告，并支持导出 HTML。", "info");
+    return;
+  }
+  if (value) {
+    els.queryInput.value = value;
+    setLaunchStatus("已填入建议问题，可以直接启动研究，也可以继续修改。", "info");
+    els.queryInput.focus();
+  }
 }
 
 async function syncReportForCurrentRun() {
@@ -632,7 +695,11 @@ async function syncWatchlistForCurrentUser() {
 async function startRun() {
   const query = els.queryInput.value.trim();
   if (!query) {
-    setLaunchStatus("请输入一个股票研究问题，例如：帮我分析一下 NVDA 未来一个月走势。", "warning");
+    setLaunchStatus(
+      "请输入一个股票研究问题，例如：帮我分析一下 NVDA 未来一个月走势。",
+      "warning",
+      defaultResearchActions,
+    );
     return;
   }
 
@@ -664,7 +731,7 @@ async function startRun() {
   } catch (error) {
     const route = error.payload?.route || "";
     const tone = ["missing_ticker", "out_of_scope", "product"].includes(route) ? "warning" : "error";
-    setLaunchStatus(error.message, tone);
+    setLaunchStatus(error.payload?.summary || error.message, tone, error.payload?.actions || defaultResearchActions);
   } finally {
     els.startRunBtn.disabled = false;
     els.startRunBtn.textContent = "启动研究";

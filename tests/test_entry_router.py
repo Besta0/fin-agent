@@ -21,11 +21,14 @@ class EntryRouterTest(unittest.TestCase):
         self.assertEqual(route.route, "missing_ticker")
         self.assertFalse(route.should_start_research)
         self.assertIn("不会启动完整投研流程", route.response)
+        self.assertIn("没有识别出公司或 ticker", route.summary)
+        self.assertTrue(any(action.get("kind") == "query" for action in route.actions))
 
     def test_product_command_with_ticker_does_not_start_research(self) -> None:
         route = classify_entry_query("打开 NVDA 报告")
         self.assertEqual(route.route, "product")
         self.assertFalse(route.should_start_research)
+        self.assertTrue(any(action.get("kind") == "report" for action in route.actions))
 
     def test_research_with_preference_word_still_starts_research(self) -> None:
         route = classify_entry_query("我偏好短线，帮我分析 NVDA 的估值风险")
@@ -37,6 +40,8 @@ class EntryRouterTest(unittest.TestCase):
         self.assertEqual(route.route, "out_of_scope")
         self.assertFalse(route.should_start_research)
         self.assertIn("不属于 Fin Agent 的项目范围", route.response)
+        self.assertIn("不属于当前投研范围", route.summary)
+        self.assertTrue(any(action.get("kind") == "settings" for action in route.actions))
 
     def test_prompt_documents_entry_routes(self) -> None:
         self.assertIn("research | missing_ticker | product | out_of_scope", ENTRY_ROUTER_PROMPT)

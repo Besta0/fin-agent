@@ -128,6 +128,21 @@ class EntryRoute:
     should_start_research: bool
     reason: str
     response: str = ""
+    summary: str = ""
+    actions: tuple[dict[str, str], ...] = ()
+
+
+RESEARCH_ACTIONS = (
+    {"label": "分析 NVDA", "kind": "query", "value": "帮我分析一下 NVDA 未来一个月走势"},
+    {"label": "分析闪迪", "kind": "query", "value": "帮我分析一下闪迪未来一个月走势，并整理新闻线索和风险点"},
+    {"label": "分析 TSLA", "kind": "query", "value": "帮我分析一下 TSLA 是偏多还是偏空"},
+)
+
+PRODUCT_ACTIONS = (
+    {"label": "打开模型设置", "kind": "settings", "value": "模型设置"},
+    {"label": "查看观察池", "kind": "watchlist", "value": "查看观察池"},
+    {"label": "查看当前报告", "kind": "report", "value": "打开最近报告"},
+)
 
 
 def format_missing_ticker_response() -> str:
@@ -182,6 +197,8 @@ def classify_entry_query(query: str) -> EntryRoute:
             should_start_research=False,
             reason="empty_query",
             response="请输入一个股票投研问题，例如：帮我分析一下 NVDA 未来一个月走势。",
+            summary="先输入一个股票投研问题，或者点击下面的建议动作。",
+            actions=RESEARCH_ACTIONS,
         )
 
     has_target = has_research_target(text)
@@ -192,6 +209,8 @@ def classify_entry_query(query: str) -> EntryRoute:
             should_start_research=False,
             reason="product_scope_query",
             response=format_product_scope_response(),
+            summary="这是产品内操作，不需要启动投研 Agent。你可以打开对应面板，或选择一个研究示例。",
+            actions=PRODUCT_ACTIONS + RESEARCH_ACTIONS[:1],
         )
 
     if research_like and has_target:
@@ -207,6 +226,8 @@ def classify_entry_query(query: str) -> EntryRoute:
             should_start_research=False,
             reason="research_query_without_target",
             response=format_missing_ticker_response(),
+            summary="还没有识别出公司或 ticker，因此没有启动 Agent。请选择示例，或在问题里补充股票代码/公司名。",
+            actions=RESEARCH_ACTIONS,
         )
 
     return EntryRoute(
@@ -214,6 +235,8 @@ def classify_entry_query(query: str) -> EntryRoute:
         should_start_research=False,
         reason="outside_fin_agent_scope",
         response=format_out_of_scope_response(),
+        summary="这个问题不属于当前投研范围，所以没有启动 Agent。请选择一个投研示例，或打开模型设置继续配置。",
+        actions=RESEARCH_ACTIONS[:2] + PRODUCT_ACTIONS[:1],
     )
 
 
