@@ -39,6 +39,7 @@ from financial_agent.tools.run_dashboard import (
     run_dashboard_payload,
     summarize_run_update,
 )
+from financial_agent.tools.run_preflight import run_preflight_payload
 from financial_agent.tools.watchlist import load_watchlist
 
 
@@ -71,7 +72,7 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
-        if parsed.path not in {"/api/run/start", "/api/settings/save", "/api/settings/test"}:
+        if parsed.path not in {"/api/run/start", "/api/run/preflight", "/api/settings/save", "/api/settings/test"}:
             self._send_json({"error": "Unknown API route."}, HTTPStatus.NOT_FOUND)
             return
 
@@ -97,6 +98,10 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
         user_id = safe_user_id(str(body.get("user_id") or "chainlit"))
         if not query:
             self._send_json({"error": "query is required."}, HTTPStatus.BAD_REQUEST)
+            return
+
+        if parsed.path == "/api/run/preflight":
+            self._send_json(run_preflight_payload(query, user_id=user_id))
             return
 
         entry_route = classify_entry_query(query)

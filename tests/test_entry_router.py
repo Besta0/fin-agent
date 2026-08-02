@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from financial_agent.entry_router import ENTRY_ROUTER_PROMPT, classify_entry_query
+from financial_agent.entry_router import ENTRY_ROUTER_PROMPT, classify_entry_query, resolve_research_target
 
 
 class EntryRouterTest(unittest.TestCase):
@@ -15,6 +15,8 @@ class EntryRouterTest(unittest.TestCase):
         route = classify_entry_query("看看苹果最近怎么样")
         self.assertEqual(route.route, "research")
         self.assertTrue(route.should_start_research)
+        target = resolve_research_target("看看苹果最近怎么样")
+        self.assertEqual(target["ticker"], "AAPL")
 
     def test_missing_ticker_does_not_start_research(self) -> None:
         route = classify_entry_query("帮我分析一下未来一个月走势")

@@ -43,8 +43,12 @@
             </div>
           </div>
           <div class="launch-actions">
-            <button id="startRunBtn" type="button">启动研究</button>
+            <div class="launch-button-row">
+              <button id="preflightRunBtn" class="secondary-button" type="button">预检</button>
+              <button id="startRunBtn" type="button">启动研究</button>
+            </div>
             <p id="launchStatus" class="launch-status info">选择模板或直接输入问题，看板会自动切到新 run。</p>
+            <div id="preflightCard" class="preflight-card is-hidden"></div>
             <div id="launchSuggestions" class="launch-suggestions" aria-label="下一步建议"></div>
           </div>
         </section>

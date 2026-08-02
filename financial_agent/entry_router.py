@@ -246,9 +246,25 @@ def looks_like_research_query(query: str) -> bool:
 
 
 def has_research_target(query: str) -> bool:
-    if _extract_alias(query):
-        return True
-    return bool(_extract_ticker_token(query))
+    return bool(resolve_research_target(query).get("ticker"))
+
+
+def resolve_research_target(query: str) -> dict[str, str]:
+    alias_ticker = _extract_alias(query)
+    if alias_ticker:
+        return {
+            "ticker": alias_ticker,
+            "company_name": _company_name_for_ticker(alias_ticker),
+            "method": "alias",
+        }
+    token = _extract_ticker_token(query)
+    if token:
+        return {
+            "ticker": token,
+            "company_name": token,
+            "method": "symbol",
+        }
+    return {"ticker": "", "company_name": "", "method": "none"}
 
 
 def _is_product_scope_query(query: str) -> bool:
@@ -278,6 +294,25 @@ def _extract_ticker_token(query: str) -> str:
             continue
         return ticker
     return ""
+
+
+def _company_name_for_ticker(ticker: str) -> str:
+    for _alias, candidate in COMPANY_ALIASES.items():
+        if candidate == ticker:
+            return {
+                "NVDA": "NVIDIA",
+                "AAPL": "Apple",
+                "TSLA": "Tesla",
+                "MSFT": "Microsoft",
+                "GOOGL": "Alphabet",
+                "AMZN": "Amazon",
+                "META": "Meta Platforms",
+                "AMD": "Advanced Micro Devices",
+                "TSM": "Taiwan Semiconductor",
+                "SNDK": "Sandisk",
+                "WDC": "Western Digital",
+            }.get(ticker, ticker)
+    return ticker
 
 
 def _is_symbol_only_query(query: str) -> bool:

@@ -20,6 +20,8 @@ const state = {
   agentFilter: initialAgentFilter,
   detailFilter: localStorage.getItem("finAgentDetailFilter") || "",
   launchActions: [],
+  preflight: null,
+  preflightQuery: "",
   refreshTimer: null,
 };
 
@@ -58,8 +60,10 @@ const els = {
   refreshBtn: document.getElementById("refreshBtn"),
   settingsToggleBtn: document.getElementById("settingsToggleBtn"),
   queryInput: document.getElementById("queryInput"),
+  preflightRunBtn: document.getElementById("preflightRunBtn"),
   startRunBtn: document.getElementById("startRunBtn"),
   launchStatus: document.getElementById("launchStatus"),
+  preflightCard: document.getElementById("preflightCard"),
   launchSuggestions: document.getElementById("launchSuggestions"),
   launchModelStatus: document.getElementById("launchModelStatus"),
   settingsPanel: document.getElementById("settingsPanel"),
@@ -184,11 +188,19 @@ function bindEvents() {
     els.detailFilterInput.focus();
   });
 
+  els.preflightRunBtn.addEventListener("click", () => runPreflight({ showReadyStatus: true }));
   els.startRunBtn.addEventListener("click", startRun);
   els.queryInput.addEventListener("keydown", async (event) => {
     if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
       event.preventDefault();
       await startRun();
+    }
+  });
+  els.queryInput.addEventListener("input", () => {
+    if (state.preflightQuery && els.queryInput.value.trim() !== state.preflightQuery) {
+      state.preflight = null;
+      state.preflightQuery = "";
+      renderPreflightCard(null);
     }
   });
 }
@@ -509,6 +521,13 @@ function applyLaunchAction(action) {
   }
   const kind = action.kind || "query";
   const value = action.value || "";
+  if (kind === "start") {
+    if (value) {
+      els.queryInput.value = value;
+    }
+    startRun();
+    return;
+  }
   if (kind === "settings") {
     state.settingsOpen = true;
     localStorage.setItem("finAgentSettingsOpen", "true");
@@ -532,6 +551,88 @@ function applyLaunchAction(action) {
     setLaunchStatus("已填入建议问题，可以直接启动研究，也可以继续修改。", "info");
     els.queryInput.focus();
   }
+}
+
+async function runPreflight({ showReadyStatus = false } = {}) {
+  const query = els.queryInput.value.trim();
+  if (!query) {
+    state.preflight = null;
+    state.preflightQuery = "";
+    renderPreflightCard(null);
+    setLaunchStatus(
+      "请输入一个股票研究问题，例如：帮我分析一下 NVDA 未来一个月走势。",
+      "warning",
+      defaultResearchActions,
+    );
+    return null;
+  }
+
+  setLaunchButtonsDisabled(true);
+  els.preflightRunBtn.textContent = "预检中";
+  try {
+    const data = await postJson("/api/run/preflight", {
+      user_id: state.userId || "chainlit",
+      query,
+    });
+    state.preflight = data;
+    state.preflightQuery = query;
+    renderPreflightCard(data);
+    const tone = data.can_start ? "success" : "warning";
+    if (showReadyStatus || !data.can_start) {
+      setLaunchStatus(data.summary || "预检完成。", tone, data.actions || defaultResearchActions);
+    }
+    return data;
+  } catch (error) {
+    state.preflight = null;
+    state.preflightQuery = "";
+    renderPreflightCard(null);
+    setLaunchStatus(`预检失败：${error.message}`, "error");
+    return null;
+  } finally {
+    setLaunchButtonsDisabled(false);
+    els.preflightRunBtn.textContent = "预检";
+  }
+}
+
+function renderPreflightCard(data) {
+  if (!data) {
+    els.preflightCard.className = "preflight-card is-hidden";
+    els.preflightCard.innerHTML = "";
+    return;
+  }
+
+  const target = data.target || {};
+  const model = data.model || {};
+  const warnings = data.warnings || [];
+  els.preflightCard.className = `preflight-card ${data.can_start ? "ready" : "blocked"}`;
+  els.preflightCard.innerHTML = `
+    <h3>${escapeHtml(data.can_start ? "预检通过" : "需要处理后再启动")}</h3>
+    <p class="muted">${escapeHtml(data.summary || "预检完成。")}</p>
+    <div class="preflight-meta">
+      <div>
+        <span>识别标的</span>
+        <strong>${escapeHtml(target.ticker || "未识别")}</strong>
+      </div>
+      <div>
+        <span>模型</span>
+        <strong>${escapeHtml([model.provider_label || model.provider, model.model].filter(Boolean).join(" / ") || "未配置")}</strong>
+      </div>
+      <div>
+        <span>API Key</span>
+        <strong>${escapeHtml(model.api_key_configured ? (model.api_key_masked || "已配置") : "未配置")}</strong>
+      </div>
+      <div>
+        <span>预计 Agent</span>
+        <strong>${escapeHtml(String(data.estimated_agent_count || 0))}</strong>
+      </div>
+    </div>
+    ${warnings.length > 0 ? `<ul class="preflight-warnings">${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>` : ""}
+  `;
+}
+
+function setLaunchButtonsDisabled(disabled) {
+  els.preflightRunBtn.disabled = disabled;
+  els.startRunBtn.disabled = disabled;
 }
 
 async function syncReportForCurrentRun() {
@@ -703,11 +804,18 @@ async function startRun() {
     return;
   }
 
+  const preflight = state.preflightQuery === query && state.preflight
+    ? state.preflight
+    : await runPreflight();
+  if (!preflight || !preflight.can_start) {
+    return;
+  }
+
   const currentSettings = state.settings?.settings;
   const launchPrefix = currentSettings && !currentSettings.api_key_configured
     ? "当前用户未配置 API Key，LLM 生成能力可能受限；"
     : "";
-  els.startRunBtn.disabled = true;
+  setLaunchButtonsDisabled(true);
   els.startRunBtn.textContent = "启动中";
   setLaunchStatus(`${launchPrefix}正在创建 run，并启动多 Agent 工作流...`, "loading");
   try {
@@ -723,8 +831,11 @@ async function startRun() {
     state.compareKey = "";
     state.watchlist = null;
     state.watchlistKey = "";
+    state.preflight = null;
+    state.preflightQuery = "";
     localStorage.setItem("finAgentDashboardUser", state.userId);
     els.queryInput.value = "";
+    renderPreflightCard(null);
     setLaunchStatus(`已启动 run ${data.run_id}，看板会自动刷新。`, "success");
     await loadUsers();
     await loadPayload();
@@ -733,7 +844,7 @@ async function startRun() {
     const tone = ["missing_ticker", "out_of_scope", "product"].includes(route) ? "warning" : "error";
     setLaunchStatus(error.payload?.summary || error.message, tone, error.payload?.actions || defaultResearchActions);
   } finally {
-    els.startRunBtn.disabled = false;
+    setLaunchButtonsDisabled(false);
     els.startRunBtn.textContent = "启动研究";
   }
 }

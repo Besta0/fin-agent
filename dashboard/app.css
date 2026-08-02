@@ -246,7 +246,13 @@ h3 {
   min-width: 0;
 }
 
-.launch-actions button {
+.launch-button-row {
+  display: grid;
+  grid-template-columns: minmax(92px, 0.38fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.launch-button-row button {
   width: 100%;
 }
 
@@ -292,6 +298,63 @@ h3 {
   border-color: #fecaca;
   background: var(--red-soft);
   color: var(--red);
+}
+
+.preflight-card {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.preflight-card.ready {
+  border-color: #a7f3d0;
+  background: var(--teal-soft);
+}
+
+.preflight-card.blocked {
+  border-color: #fed7aa;
+  background: var(--amber-soft);
+}
+
+.preflight-card h3 {
+  font-size: 13px;
+}
+
+.preflight-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.preflight-meta div {
+  min-width: 0;
+}
+
+.preflight-meta span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.preflight-meta strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.preflight-warnings {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  color: var(--amber);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .launch-suggestions {
@@ -1221,6 +1284,10 @@ code {
 
   .template-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .launch-button-row {
+    grid-template-columns: 1fr;
   }
 
   .agent-filter-bar {
