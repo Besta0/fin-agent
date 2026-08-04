@@ -40,7 +40,7 @@ Chainlit 现在有两层产品入口：产品主页负责介绍价值和功能�
 - 独立 Agent 队列筛选：可按全部、运行中、已完成、待处理、失败快速聚焦 Agent 卡片
 - 独立 Agent 详情过滤：可在详情面板按字段名或内容搜索结构化输出，快速定位估值、风险、新闻、记忆等线索
 - 独立看板启动区：提供短线走势、历史复盘、财报后分析、中文公司名等研究模板，并展示当前新研究会使用的模型配置状态
-- 独立看板运行前预检：启动前检查 ticker、模型、API key、预计 Agent 和风险提示，预检不通过时不创建 run
+- 独立看板运行前预检：启动前检查 ticker、模型、API key、预计 Agent 和风险提示，前端按钮和后端 `/api/run/start` 都会阻断不合格请求
 - 独立看板入口提示：无关请求或缺少 ticker 时会显示短提示和可点击建议动作；不创建 run、不启动 Agent
 - 独立看板模型设置：用户可在浏览器里选择 OpenAI、DeepSeek、MiniMax、小米 MiMo，模型列表和 base_url 随 provider 自动切换，并可直接测试连接
 - 多空辩论区：把 Bull、Bear、Committee 的观点放到同一页，像投委会讨论一样展示分歧和裁决
@@ -157,7 +157,7 @@ response
 - 在独立看板创建 run 之前做零 token 运行前检查
 - 汇总入口分类、ticker 识别、用户模型配置、API key 状态和预计 Agent 数
 - 对缺 ticker、无关请求、未配置 API key 等场景返回短提示、warnings 和可点击建议动作
-- 预检通过时才允许前端继续调用 `/api/run/start`
+- 预检通过时才允许创建 run；前端启动按钮和后端 `/api/run/start` 共用同一套判断
 
 输出字段：
 
@@ -170,6 +170,7 @@ estimated_agents
 estimated_agent_count
 warnings
 actions
+decision
 ```
 
 ### Market Agent
@@ -396,7 +397,7 @@ dashboard
 - 独立看板支持 Agent 状态筛选，并在筛选按钮上展示各状态数量
 - 独立看板支持 Agent 详情输出过滤，用户可以按字段名或字段内容搜索，减少长 JSON 输出里的阅读成本
 - 独立看板支持直接输入研究问题并启动 LangGraph 分析，随后自动切到新 run 并轮询刷新
-- 独立看板支持运行前预检卡，展示识别标的、模型、API key 状态、预计 Agent 数和 warnings
+- 独立看板支持运行前预检卡，展示识别标的、模型、API key 状态、预计 Agent 数、阻断原因和 warnings
 - 独立看板支持入口 guard 反馈，缺 ticker 或项目无关请求会显示短提示卡和建议动作，避免误报为系统错误
 - 独立看板支持一键填入研究模板，并在启动前展示当前用户的 provider、model 和 API key 配置状态
 - 独立看板支持展示 Portfolio Agent 维护的观察池，包含优先级、组合角色、收益表现和跟踪理由

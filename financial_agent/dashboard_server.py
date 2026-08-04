@@ -11,7 +11,6 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from financial_agent.entry_router import classify_entry_query
 from financial_agent.tools.dashboard_settings import (
     payload_to_llm_config,
     save_user_model_settings,
@@ -39,7 +38,7 @@ from financial_agent.tools.run_dashboard import (
     run_dashboard_payload,
     summarize_run_update,
 )
-from financial_agent.tools.run_preflight import run_preflight_payload
+from financial_agent.tools.run_preflight import run_preflight_payload, run_preflight_rejection_payload
 from financial_agent.tools.watchlist import load_watchlist
 
 
@@ -104,20 +103,9 @@ class DashboardRequestHandler(BaseHTTPRequestHandler):
             self._send_json(run_preflight_payload(query, user_id=user_id))
             return
 
-        entry_route = classify_entry_query(query)
-        if not entry_route.should_start_research:
-            self._send_json(
-                {
-                    "ok": False,
-                    "route": entry_route.route,
-                    "reason": entry_route.reason,
-                    "summary": entry_route.summary,
-                    "message": entry_route.response,
-                    "error": entry_route.response,
-                    "actions": list(entry_route.actions),
-                },
-                HTTPStatus.UNPROCESSABLE_ENTITY,
-            )
+        preflight = run_preflight_payload(query, user_id=user_id)
+        if not preflight.get("can_start"):
+            self._send_json(run_preflight_rejection_payload(preflight), HTTPStatus.UNPROCESSABLE_ENTITY)
             return
 
         record = create_run_record(user_id, query)

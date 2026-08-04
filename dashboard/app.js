@@ -603,10 +603,11 @@ function renderPreflightCard(data) {
 
   const target = data.target || {};
   const model = data.model || {};
+  const decision = data.decision || {};
   const warnings = data.warnings || [];
   els.preflightCard.className = `preflight-card ${data.can_start ? "ready" : "blocked"}`;
   els.preflightCard.innerHTML = `
-    <h3>${escapeHtml(data.can_start ? "预检通过" : "需要处理后再启动")}</h3>
+    <h3>${escapeHtml(decision.label || (data.can_start ? "预检通过" : "需要处理后再启动"))}</h3>
     <p class="muted">${escapeHtml(data.summary || "预检完成。")}</p>
     <div class="preflight-meta">
       <div>

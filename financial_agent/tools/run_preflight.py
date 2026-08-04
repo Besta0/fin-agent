@@ -41,6 +41,7 @@ def run_preflight_payload(query: str, user_id: str | None = None) -> dict[str, A
         "route": route.route,
         "reason": route.reason,
         "can_start": can_start,
+        "decision": _decision_payload(route.route, can_start, warnings, model_ready),
         "summary": summary,
         "message": route.response,
         "target": target,
@@ -58,6 +59,60 @@ def run_preflight_payload(query: str, user_id: str | None = None) -> dict[str, A
         "estimated_agent_count": len(AGENT_FLOW) if route.should_start_research else 0,
         "warnings": warnings,
         "actions": _dedupe_actions(actions or list(PRODUCT_ACTIONS)),
+    }
+
+
+def run_preflight_rejection_payload(preflight: dict[str, Any]) -> dict[str, Any]:
+    """Return the API error shape used when start is blocked by preflight."""
+    return {
+        "ok": False,
+        "route": preflight.get("route"),
+        "reason": preflight.get("reason"),
+        "can_start": False,
+        "decision": preflight.get("decision"),
+        "summary": preflight.get("summary"),
+        "message": preflight.get("message") or preflight.get("summary"),
+        "error": preflight.get("message") or preflight.get("summary") or "预检未通过，未启动投研流程。",
+        "target": preflight.get("target"),
+        "model": preflight.get("model"),
+        "estimated_agent_count": preflight.get("estimated_agent_count", 0),
+        "warnings": preflight.get("warnings", []),
+        "actions": preflight.get("actions", []),
+    }
+
+
+def _decision_payload(route: str, can_start: bool, warnings: list[str], model_ready: bool) -> dict[str, Any]:
+    if can_start:
+        return {
+            "status": "ready",
+            "label": "允许启动",
+            "blocked_by": [],
+            "detail": "问题属于股票投研范围，已识别标的，模型连接条件满足。",
+        }
+
+    blocked_by: list[str] = []
+    if route == "missing_ticker":
+        blocked_by.append("missing_ticker")
+    if route in {"product", "out_of_scope"}:
+        blocked_by.append(route)
+    if not model_ready and route == "research":
+        blocked_by.append("missing_api_key")
+    if warnings and not blocked_by:
+        blocked_by.append("warning")
+
+    label_map = {
+        "missing_ticker": "缺少标的",
+        "product": "产品内操作",
+        "out_of_scope": "超出范围",
+        "missing_api_key": "缺少 API Key",
+        "warning": "需要处理",
+    }
+    primary = blocked_by[0] if blocked_by else "warning"
+    return {
+        "status": "blocked",
+        "label": label_map.get(primary, "需要处理"),
+        "blocked_by": blocked_by,
+        "detail": "预检未通过，因此不会创建 run，也不会启动后续 Agent。",
     }
 
 
