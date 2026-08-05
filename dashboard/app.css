@@ -323,6 +323,13 @@ h3 {
   font-size: 13px;
 }
 
+.preflight-decision {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .preflight-meta {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -347,6 +354,23 @@ h3 {
   font-size: 13px;
 }
 
+.preflight-blockers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.preflight-blockers span {
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid #fed7aa;
+  border-radius: 999px;
+  background: #fff7ed;
+  color: var(--amber);
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .preflight-warnings {
   display: grid;
   gap: 6px;
@@ -355,6 +379,57 @@ h3 {
   color: var(--amber);
   font-size: 12px;
   line-height: 1.45;
+}
+
+.preflight-agents {
+  border-top: 1px solid rgb(15 23 42 / 0.08);
+  padding-top: 8px;
+}
+
+.preflight-agents summary {
+  cursor: pointer;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.preflight-agents > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.preflight-agents article {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgb(255 255 255 / 0.72);
+}
+
+.preflight-agents strong,
+.preflight-agents span {
+  display: block;
+}
+
+.preflight-agents strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+
+.preflight-agents span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.preflight-agents p {
+  margin-top: 6px;
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .launch-suggestions {
@@ -1287,6 +1362,10 @@ code {
   }
 
   .launch-button-row {
+    grid-template-columns: 1fr;
+  }
+
+  .preflight-agents > div {
     grid-template-columns: 1fr;
   }
 

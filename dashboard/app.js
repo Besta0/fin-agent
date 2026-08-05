@@ -605,10 +605,14 @@ function renderPreflightCard(data) {
   const model = data.model || {};
   const decision = data.decision || {};
   const warnings = data.warnings || [];
+  const agents = Array.isArray(data.estimated_agents) ? data.estimated_agents : [];
+  const blockers = Array.isArray(decision.blocked_by) ? decision.blocked_by : [];
+  const decisionDetail = decision.detail || "";
   els.preflightCard.className = `preflight-card ${data.can_start ? "ready" : "blocked"}`;
   els.preflightCard.innerHTML = `
     <h3>${escapeHtml(decision.label || (data.can_start ? "预检通过" : "需要处理后再启动"))}</h3>
     <p class="muted">${escapeHtml(data.summary || "预检完成。")}</p>
+    ${decisionDetail ? `<p class="preflight-decision">${escapeHtml(decisionDetail)}</p>` : ""}
     <div class="preflight-meta">
       <div>
         <span>识别标的</span>
@@ -627,8 +631,38 @@ function renderPreflightCard(data) {
         <strong>${escapeHtml(String(data.estimated_agent_count || 0))}</strong>
       </div>
     </div>
+    ${blockers.length > 0 ? `
+      <div class="preflight-blockers" aria-label="阻断原因">
+        ${blockers.map((blocker) => `<span>${escapeHtml(formatPreflightBlocker(blocker))}</span>`).join("")}
+      </div>
+    ` : ""}
     ${warnings.length > 0 ? `<ul class="preflight-warnings">${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}</ul>` : ""}
+    ${agents.length > 0 ? `
+      <details class="preflight-agents">
+        <summary>查看将启动的 ${escapeHtml(String(agents.length))} 个 Agent</summary>
+        <div>
+          ${agents.map((agent) => `
+            <article>
+              <strong>${escapeHtml(agent.name || agent.node || "Agent")}</strong>
+              <span>${escapeHtml(agent.role || "")}</span>
+              <p>${escapeHtml(agent.mission || "")}</p>
+            </article>
+          `).join("")}
+        </div>
+      </details>
+    ` : ""}
   `;
+}
+
+function formatPreflightBlocker(blocker) {
+  const labels = {
+    missing_ticker: "缺少股票代码或公司名",
+    product: "产品内操作",
+    out_of_scope: "超出投研范围",
+    missing_api_key: "未配置 API Key",
+    warning: "需要先处理提示",
+  };
+  return labels[blocker] || blocker;
 }
 
 function setLaunchButtonsDisabled(disabled) {
